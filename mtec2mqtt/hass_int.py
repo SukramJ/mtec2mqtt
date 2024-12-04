@@ -12,7 +12,7 @@ import logging
 from typing import Any, Final
 
 from mtec2mqtt import mqtt_client
-from mtec2mqtt.const import HA, Register
+from mtec2mqtt.const import HA, MTEC_PREFIX, MTEC_TOPIC_ROOT, HAPlatform, Register
 
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class HassIntegration:
                 HA.NAME: item[0],
                 HA.UNIQUE_ID: item[1],
                 HA.PAYLOAD_PRESS: item[2],
-                HA.COMMAND_TOPIC: f"MTEC/{self._serial_no}/automations/command",
+                HA.COMMAND_TOPIC: f"{MTEC_TOPIC_ROOT}/{self._serial_no}/automations/command",
                 HA.DEVICE: self._device_info,
             }
             topic = f"{self._hass_base_topic}/button/{item[1]}/config"
@@ -98,18 +98,22 @@ class HassIntegration:
                     break
 
             if item[Register.GROUP] and do_hass_registration:
-                component_type = item.get("hass_component_type", "sensor")
-                if component_type == "sensor":
+                component_type = item.get(Register.COMPONENT_TYPE, HAPlatform.SENSOR)
+                if component_type == HAPlatform.SENSOR:
                     self._append_sensor(item)
-                if component_type == "binary_sensor":
+                elif component_type == HAPlatform.BINARY_SENSOR:
                     self._append_binary_sensor(item)
+                elif component_type == HAPlatform.SELECT:
+                    self._append_select(item)
+                elif component_type == HAPlatform.SWITCH:
+                    self._append_switch(item)
 
     def _append_sensor(self, item: dict[str, Any]) -> None:
         data_item = {
             HA.NAME: item[Register.NAME],
-            HA.UNIQUE_ID: "MTEC_" + item[Register.MQTT],
+            HA.UNIQUE_ID: f"{MTEC_PREFIX}{item[Register.MQTT]}",
             HA.UNIT_OF_MEASUREMENT: item[Register.UNIT],
-            HA.STATE_TOPIC: f"MTEC/{self._serial_no}/{item[Register.GROUP]}/{item[Register.MQTT]}",
+            HA.STATE_TOPIC: f"{MTEC_TOPIC_ROOT}/{self._serial_no}/{item[Register.GROUP]}/{item[Register.MQTT]}/state",
             HA.DEVICE: self._device_info,
         }
         if hass_device_class := item.get(Register.DEVICE_CLASS):
@@ -119,14 +123,14 @@ class HassIntegration:
         if hass_state_class := item.get(Register.STATE_CLASS):
             data_item[HA.STATE_CLASS] = hass_state_class
 
-        topic = f"{self._hass_base_topic}/sensor/MTEC_{item[Register.MQTT]}/config"
+        topic = f"{self._hass_base_topic}/{HAPlatform.SENSOR}/{MTEC_PREFIX}{item[Register.MQTT]}/config"
         self._devices_array.append((topic, json.dumps(data_item)))
 
     def _append_binary_sensor(self, item: dict[str, Any]) -> None:
         data_item = {
             HA.NAME: item[Register.NAME],
-            HA.UNIQUE_ID: f"MTEC_{item[Register.MQTT]}",
-            HA.STATE_TOPIC: f"MTEC/{ self._serial_no}/{item[Register.GROUP]}/{item[Register.MQTT]}",
+            HA.UNIQUE_ID: f"{MTEC_PREFIX}{item[Register.MQTT]}",
+            HA.STATE_TOPIC: f"{MTEC_TOPIC_ROOT}/{ self._serial_no}/{item[Register.GROUP]}/{item[Register.MQTT]}/state",
             HA.DEVICE: self._device_info,
         }
 
@@ -137,5 +141,44 @@ class HassIntegration:
         if hass_payload_off := item.get(Register.PAYLOAD_OFF):
             data_item[HA.PAYLOAD_OFF] = hass_payload_off
 
-        topic = f"{self._hass_base_topic}/binary_sensor/MTEC_{item[Register.MQTT]}/config"
+        topic = f"{self._hass_base_topic}/{HAPlatform.BINARY_SENSOR}/{MTEC_PREFIX}{item[Register.MQTT]}/config"
+        self._devices_array.append((topic, json.dumps(data_item)))
+
+    def _append_select(self, item: dict[str, Any]) -> None:
+        options = item[Register.VALUE_ITEMS]
+        mtec_topic = (
+            f"{MTEC_TOPIC_ROOT}/{ self._serial_no}/{item[Register.GROUP]}/{item[Register.MQTT]}"
+        )
+        data_item = {
+            HA.NAME: item[Register.NAME],
+            HA.UNIQUE_ID: f"{MTEC_PREFIX}{item[Register.MQTT]}",
+            HA.STATE_TOPIC: f"{mtec_topic}/state",
+            HA.COMMAND_TOPIC: f"{mtec_topic}/set",
+            HA.DEVICE: self._device_info,
+            HA.OPTIONS: list(options.values()),
+        }
+
+        topic = f"{self._hass_base_topic}/{HAPlatform.SELECT}/{MTEC_PREFIX}{item[Register.MQTT]}/config"
+        self._devices_array.append((topic, json.dumps(data_item)))
+
+    def _append_switch(self, item: dict[str, Any]) -> None:
+        mtec_topic = (
+            f"{MTEC_TOPIC_ROOT}/{self._serial_no}/{item[Register.GROUP]}/{item[Register.MQTT]}"
+        )
+        data_item = {
+            HA.NAME: item[Register.NAME],
+            HA.UNIQUE_ID: f"{MTEC_PREFIX}{item[Register.MQTT]}",
+            HA.STATE_TOPIC: f"{mtec_topic}/state",
+            HA.COMMAND_TOPIC: f"{mtec_topic}/set",
+            HA.DEVICE: self._device_info,
+        }
+
+        if hass_device_class := item.get(Register.DEVICE_CLASS):
+            data_item[HA.DEVICE_CLASS] = hass_device_class
+        if hass_payload_on := item.get(Register.PAYLOAD_ON):
+            data_item[HA.PAYLOAD_ON] = hass_payload_on
+        if hass_payload_off := item.get(Register.PAYLOAD_OFF):
+            data_item[HA.PAYLOAD_OFF] = hass_payload_off
+
+        topic = f"{self._hass_base_topic}/{HAPlatform.SWITCH}/{MTEC_PREFIX}{item[Register.MQTT]}/config"
         self._devices_array.append((topic, json.dumps(data_item)))

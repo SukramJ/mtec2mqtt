@@ -15,13 +15,7 @@ from typing import Any, Final
 
 from mtec2mqtt import hass_int, modbus_client, mqtt_client
 from mtec2mqtt.config import init_config, init_register_map
-from mtec2mqtt.const import (
-    ENUM_REGISTER_CODES,
-    SECONDARY_REGISTER_GROUPS,
-    Config,
-    Register,
-    RegisterGroup,
-)
+from mtec2mqtt.const import SECONDARY_REGISTER_GROUPS, Config, Register, RegisterGroup
 
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -165,9 +159,11 @@ class MtecCoordinator:
                             data[register][Register.VALUE] = (
                                 f"V{fw0.replace(' ', '.')}-V{fw1.replace(' ', '.')}"
                             )
-                        elif register in ENUM_REGISTER_CODES:
+                        if item.get(Register.DEVICE_CLASS) == "enum" and (
+                            value_items := item.get(Register.VALUE_ITEMS)
+                        ):
                             data[register][Register.VALUE] = _convert_code(
-                                register=register, value=value
+                                value=value, value_items=value_items
                             )
 
                         pvdata[item[Register.MQTT]] = data[register]
@@ -253,7 +249,7 @@ class MtecCoordinator:
     def write_to_mqtt(self, pvdata: PVDATA_TYPE, topic_base: str, group: RegisterGroup) -> None:
         """Write data to MQTT."""
         for param, data in pvdata.items():
-            topic = f"{topic_base}/{group}/{param}"
+            topic = f"{topic_base}/{group}/{param}/state"
             if isinstance(data, dict):
                 value = data[Register.VALUE]
                 if isinstance(value, float):
@@ -271,15 +267,16 @@ class MtecCoordinator:
             self._mqtt_client.publish(topic=topic, payload=payload)
 
 
-def _convert_code(register: str, value: str) -> str:
+def _convert_code(value: int | str, value_items: dict[int, str]) -> str:
     """Convert bms fault code register value."""
-    faults: list[str] = []
-    fault_no = int(f"0b{value.replace(' ', '')}", 2)
+    if isinstance(value, int):
+        return value_items.get(value, "Unknown")
 
-    if code_table := ENUM_REGISTER_CODES.get(register):
-        for no, fault in code_table.items():
-            if _has_bit(val=fault_no, idx=no):
-                faults.append(fault)
+    faults: list[str] = []
+    value_no = int(f"0b{value.replace(' ', '')}", 2)
+    for no, fault in value_items.items():
+        if _has_bit(val=value_no, idx=no):
+            faults.append(fault)
 
     if not faults:
         faults.append("OK")

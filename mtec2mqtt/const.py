@@ -11,6 +11,8 @@ CONFIG_PATH: Final = "mtec2mqtt"
 CONFIG_ROOT: Final = ".config"
 CONFIG_TEMPLATE: Final = "config-template.yaml"
 DEFAULT_FRAMER: Final = "rtu"
+MTEC_TOPIC_ROOT: Final = "MTEC"
+MTEC_PREFIX: Final = "MTEC_"
 UTF8: Final = "utf-8"
 
 
@@ -49,6 +51,7 @@ class HA(StrEnum):
     MANUFACTURER = "manufacturer"
     MODEL = "model"
     NAME = "name"
+    OPTIONS = "options"
     PAYLOAD_OFF = "payload_off"
     PAYLOAD_ON = "payload_on"
     PAYLOAD_PRESS = "payload_press"
@@ -62,12 +65,22 @@ class HA(StrEnum):
     VIA_DEVICE = "via_device"
 
 
+class HAPlatform(StrEnum):
+    """Enum with HA platform."""
+
+    BINARY_SENSOR = "binary_sensor"
+    SELECT = "select"
+    SENSOR = "sensor"
+    SWITCH = "switch"
+
+
 class Register(StrEnum):
     """Enum with Register qualifiers."""
 
     DEVICE_CLASS = "hass_device_class"
     FIRMWARE_VERSION = "firmware_version"
     GROUP = "group"
+    COMPONENT_TYPE = "hass_component_type"
     LENGTH = "length"
     MQTT = "mqtt"
     NAME = "name"
@@ -79,6 +92,7 @@ class Register(StrEnum):
     TYPE = "type"
     UNIT = "unit"
     VALUE = "value"
+    VALUE_ITEMS = "hass_value_items"
     VALUE_TEMPLATE = "hass_value_template"
     WRITABLE = "writable"
 
@@ -103,76 +117,4 @@ SECONDARY_REGISTER_GROUPS: Final = {
     2: RegisterGroup.BACKUP,
     3: RegisterGroup.BATTERY,
     4: RegisterGroup.PV,
-}
-
-BMS_ALARM_CODES: Final = {
-    2: "Cells High Voltage Warning",
-    4: "Battery Module Discharge Low Voltage Warning",
-    8: "Battery Module Charge Over Voltage Warning",
-    16: "Charge Low Temperature Warning",
-    32: "Charge Over Temperature Warning",
-    64: "Discharge Low Temperature Warning",
-    128: "Discharge Over Temperature Warning",
-    256: "Battery Module Charge Over Current Warning",
-    512: "Battery Module Discharge Over Current Warning",
-    1024: "Battery Module Low Voltage Warning",
-    2048: "Battery Module Over Voltage Warning",
-    4096: "Power Terminal Over Temperature Warning",
-    8192: "Ambient Low Temperature Warning",
-    16384: "Ambient Over Temperature Warning",
-}
-
-BMS_FAULT_CODES: Final = {
-    1: "Internal COM Fault",
-    2: "Voltage Sensor Fault",
-    4: "Temperature Sensor Fault",
-    8: "Relay Fault",
-    16: "Cells Damage Fault",
-}
-
-BMS_PROTECTION_CODES: Final = {
-    2: "Cells High Voltage Protection",
-    4: "Battery Module Discharge Low Voltage Protection",
-    8: "Battery Module Charge Over Voltage Protection",
-    16: "Charge Low Temperature Protection",
-    32: "Charge Over Temperature Protection",
-    64: "Discharge Low Temperature Protection",
-    128: "Discharge Over Temperature Protection",
-    256: "Battery Module Charge Over Current Protection",
-    512: "Battery Module Discharge Over Current Protection",
-    1024: "Battery Module Low Voltage Protection",
-    2048: "Battery Module Over Voltage Protection",
-    4096: "Power Terminal Over Temperature Protection",
-    8192: "Ambient Low Temperature Protection",
-    16384: "Ambient High Temperature Protection",
-    32768: "Leakage Current Protection",
-}
-
-FAULT_FLAGS_1: Final = {
-    1: "Mains Lost",
-    2: "Grid Voltage Fault",
-    4: "Grid Frequency Fault",
-    8: "DCI Fault",
-    16: "ISO Over Limitation",
-    32: "GFCI Fault",
-    64: "PV Over Voltage",
-    128: "Bus Voltage Fault",
-}
-
-FAULT_FLAGS_2: Final = {
-    2: "SPI Fault",
-    4: "E2 Fault",
-    8: "GFCI Device Fault",
-    16: "AC Transducer Fault",
-    32: "Relay Check Fail",
-    64: "Iternal Fan Fault",
-    128: "External Fan Fault",
-}
-
-ENUM_REGISTER_CODES: Final = {
-    "10112": FAULT_FLAGS_1,
-    "10114": FAULT_FLAGS_2,
-    "53509": BMS_FAULT_CODES,
-    "53511": BMS_PROTECTION_CODES,
-    "53513": BMS_ALARM_CODES,
 }

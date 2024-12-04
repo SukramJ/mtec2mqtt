@@ -1,4 +1,3 @@
-
 ### This is a fork of the fantastic project [croedel/MTECmqtt](https://github.com/croedel/MTECmqtt)
 
 # M-TEC 2 MQTT
