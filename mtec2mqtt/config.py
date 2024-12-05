@@ -15,7 +15,20 @@ from typing import Any, Final, cast
 
 import yaml
 
-from mtec2mqtt.const import CONFIG_FILE, CONFIG_PATH, CONFIG_ROOT, CONFIG_TEMPLATE, UTF8, Register
+from mtec2mqtt.const import (
+    CONFIG_FILE,
+    CONFIG_PATH,
+    CONFIG_ROOT,
+    CONFIG_TEMPLATE,
+    ENV_APPDATA,
+    ENV_XDG_CONFIG_HOME,
+    FILE_REGISTERS,
+    MANDATORY_PARAMETERS,
+    OPTIONAL_PARAMETERS,
+    UTF8,
+    Config,
+    Register,
+)
 
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -34,7 +47,9 @@ def create_config_file() -> bool:
         ip_addr = input("Please enter IP address of espressif server: ")
 
     opt = input("Enable HomeAssistant support? (y/N): ")
-    hass_cfg = "HASS_ENABLE : True" if opt.lower() == "y" else "HASS_ENABLE : False"
+    hass_cfg = (
+        f"{Config.HASS_ENABLE} : True" if opt.lower() == "y" else f"{Config.HASS_ENABLE} : False"
+    )
 
     # Read template
     try:
@@ -47,12 +62,12 @@ def create_config_file() -> bool:
         return False
 
     # Customize
-    data = data.replace("HASS_ENABLE : False", hass_cfg)
-    data = data.replace("MODBUS_IP : espressif", 'MODBUS_IP : "' + ip_addr + '"')
+    data = data.replace(f"{Config.HASS_ENABLE} : False", hass_cfg)
+    data = data.replace(f"{Config.MODBUS_IP} : espressif", f"{Config.MODBUS_IP} : '{ip_addr}'")
 
     # Write customized config
     # Usually something like ~/.config/mtec2mqtt/config.yaml resp. 'C:\\Users\\xxxx\\AppData\\Roaming'
-    if cfg_path := os.environ.get("XDG_CONFIG_HOME") or os.environ.get("APPDATA"):
+    if cfg_path := os.environ.get(ENV_XDG_CONFIG_HOME) or os.environ.get(ENV_APPDATA):
         cfg_fname = os.path.join(cfg_path, CONFIG_PATH, CONFIG_FILE)
     else:
         cfg_fname = os.path.join(
@@ -76,7 +91,7 @@ def init_config() -> dict[str, Any]:
     # Look in different locations for config.yaml file
     conf_files: list[str] = [os.path.join(os.getcwd(), CONFIG_FILE)]
     # Usually something like ~/.config/mtec2mqtt/config.yaml resp. 'C:\\Users\\xxxx\\AppData\\Roaming'
-    if cfg_path := os.environ.get("XDG_CONFIG_HOME") or os.environ.get("APPDATA"):
+    if cfg_path := os.environ.get(ENV_XDG_CONFIG_HOME) or os.environ.get(ENV_APPDATA):
         conf_files.append(os.path.join(cfg_path, CONFIG_PATH, CONFIG_FILE))
     else:
         conf_files.append(
@@ -102,7 +117,7 @@ def init_register_map() -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Read inverter registers and their mapping from YAML file."""
     BASE_DIR = os.path.dirname(__file__)  # Base installation directory
     try:
-        fname_regs = os.path.join(BASE_DIR, "registers.yaml")
+        fname_regs = os.path.join(BASE_DIR, FILE_REGISTERS)
         with open(fname_regs, encoding=UTF8) as f_regs:
             r_map = cast(dict[str, dict[str, Any]], yaml.safe_load(f_regs))
     except OSError as err:
@@ -114,24 +129,13 @@ def init_register_map() -> tuple[dict[str, dict[str, Any]], list[str]]:
 
     # Syntax checks
     reg_map: dict[str, dict[str, Any]] = {}
-    p_mandatory: list[str] = [Register.NAME]
 
-    # param, default
-    p_optional: dict[str, Any] = {
-        Register.LENGTH: None,
-        Register.TYPE: None,
-        Register.UNIT: "",
-        Register.SCALE: 1,
-        Register.WRITABLE: False,
-        Register.MQTT: None,
-        Register.GROUP: None,
-    }
     reg_groups: list[str] = []
 
     error = False
     for key, val in r_map.items():
         # Check for mandatory parameters
-        for p in p_mandatory:
+        for p in MANDATORY_PARAMETERS:
             if not val.get(p):
                 _LOGGER.warning(
                     "Skipping invalid register config: %s. Missing mandatory parameter: %s.",
@@ -144,7 +148,7 @@ def init_register_map() -> tuple[dict[str, dict[str, Any]], list[str]]:
         if not error:  # All mandatory parameters found
             item = val.copy()
             # Check optional parameters and add defaults, if not found
-            for param, default in p_optional.items():
+            for param, default in OPTIONAL_PARAMETERS.items():
                 if param not in item:
                     item[param] = default
             reg_map[key] = item  # Append to reg_map

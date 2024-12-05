@@ -1,8 +1,14 @@
 binary_sensor.mtec_energybutler_grid_injection_limit_switch:
   friendly_name: Netzeinspeisung Begrenzugsschalter
+switch_sensor.mtec_energybutler_grid_injection_limit_switch:
+  friendly_name: Netzeinspeisung Begrenzugsschalter
 binary_sensor.mtec_energybutler_off_grid_soc_limit_switch:
   friendly_name: Off-Grid SOC Begrenzugsschalter
+switch.mtec_energybutler_off_grid_soc_limit_switch:
+  friendly_name: Off-Grid SOC Begrenzugsschalter
 binary_sensor.mtec_energybutler_on_grid_soc_limit_switch:
+  friendly_name: On-Grid SOC Begrenzugsschalter
+switch.mtec_energybutler_on_grid_soc_limit_switch:
   friendly_name: On-Grid SOC Begrenzugsschalter
 sensor.mtec_energybutler_backup_current_phase_a:
   friendly_name: Backup Strom L1
@@ -90,6 +96,8 @@ sensor.mtec_energybutler_grid_injection_energy_day:
   friendly_name: Netz Energieeinspeisung Tag
 sensor.mtec_energybutler_grid_injection_power_limit:
   friendly_name: Netz Einspeisung Leistungsbegrenzung
+number.mtec_energybutler_grid_injection_power_limit:
+  friendly_name: Netz Einspeisung Leistungsbegrenzung
 sensor.mtec_energybutler_grid_power:
   friendly_name: Netz Leistung
 sensor.mtec_energybutler_grid_power_phase_a:
@@ -132,6 +140,8 @@ sensor.mtec_energybutler_inverter_ac_voltage_phase_c:
   friendly_name: Wechselrichter Spannung L3
 sensor.mtec_energybutler_inverter_operation_mode:
   friendly_name: Wechselrichter Betriebsmodus
+select.mtec_energybutler_inverter_operation_mode:
+  friendly_name: Wechselrichter Betriebsmodus
 sensor.mtec_energybutler_inverter_power_phase_a:
   friendly_name: Wechselrichter Leistung L1
 sensor.mtec_energybutler_inverter_power_phase_b:
@@ -150,7 +160,11 @@ sensor.mtec_energybutler_inverter_temperature_sensor_4:
   friendly_name: Wechselrichter Temperatursensor 4
 sensor.mtec_energybutler_off_grid_soc_limit:
   friendly_name: Off-Grid SoC Begrenzung
+number.mtec_energybutler_off_grid_soc_limit:
+  friendly_name: Off-Grid SoC Begrenzung
 sensor.mtec_energybutler_on_grid_soc_limit:
+  friendly_name: On-Grid SOC Begrenzung
+number.mtec_energybutler_on_grid_soc_limit:
   friendly_name: On-Grid SOC Begrenzung
 sensor.mtec_energybutler_own_consumption_rate_day:
   friendly_name: Eigenverbrauchsquote Tag

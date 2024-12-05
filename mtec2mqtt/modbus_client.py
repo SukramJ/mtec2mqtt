@@ -144,6 +144,20 @@ class MTECModbusClient:
         _LOGGER.debug("Data retrieval completed")
         return data
 
+    def write_register_by_name(self, name: str, value: Any) -> bool:
+        """Write a value to a register with a given name."""
+        for register, item in self._register_map.items():
+            if item[Register.MQTT] == name:
+                if value_items := item.get(Register.VALUE_ITEMS):
+                    for value_modbus, value_display in value_items.items():
+                        if value_display == value:
+                            value = value_modbus
+                            continue
+                self.write_register(register=register, value=value)
+                return True
+        _LOGGER.error("Can't write unknown register with name: %s", name)
+        return False
+
     def write_register(self, register: str, value: Any) -> bool:
         """Write a value to a register."""
         # Lookup register

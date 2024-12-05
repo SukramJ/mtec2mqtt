@@ -91,20 +91,20 @@
   length: 8
   type: STR
   mqtt: serial_no
-  group: config
+  group: static
 
-# "10008":
-#  name: Equipment info
-#  length: 1
-#  type: BYTE
-#  group: config
+"10008":
+  name: Equipment info
+  length: 1
+  type: BYTE
+  group: static
 
 "10011":
   name: Firmware version
   length: 4
   type: BYTE
   mqtt: firmware_version
-  group: config
+  group: static
 
 "10100":
   name: Inverter date
@@ -129,7 +129,6 @@
       4: "firmware update",
       5: "off grid",
     }
-  hass_value_template: "{% if value=='0' %}wait for on-grid{% elif value=='1' %}self-check{% elif value=='2' %}on-grid{% elif value=='3' %}fault{% elif value=='4' %}firmware update{% elif value=='5' %}off grid{% else %}Unknown{% endif %}"
 
 "10112":
   name: Fault flag1
@@ -722,7 +721,6 @@
   group: now-base
   hass_device_class: enum
   hass_value_items: { 0: "Discharge", 1: "Charge" }
-  hass_value_template: "{% if value=='0' %}Discharge{% elif value=='1' %}Charge{% else %}Unknown{% endif %}"
 
 "30258":
   name: Battery power
@@ -947,7 +945,6 @@
       4: "firmware update",
       5: "off grid",
     }
-  hass_value_template: "{% if value=='0' %}wait for on-grid{% elif value=='1' %}self-check{% elif value=='2' %}on-grid{% elif value=='3' %}fault{% elif value=='4' %}firmware update{% elif value=='5' %}off grid{% else %}Unknown{% endif %}"
 
 "33003":
   name: Battery temperature
@@ -1025,7 +1022,6 @@
       259: "UPS mode",
       512: "Off grid",
     }
-  hass_value_template: "{% if value=='257' %}General mode{% elif value=='258' %}Economic mode{% elif value=='259' %}UPS mode{% elif value=='512' %}Off grid{% elif value=='771' %}Manual mode{% else %}Unknown{% endif %}"
 
 "25100":
   name: Grid injection limit switch
@@ -1034,7 +1030,7 @@
   writable: true
   mqtt: grid_inject_switch
   group: config
-  hass_component_type: binary_sensor
+  hass_component_type: switch
   hass_payload_on: "1"
   hass_payload_off: "0"
 
@@ -1047,6 +1043,7 @@
   writable: true
   mqtt: grid_inject_limit
   group: config
+  hass_component_type: number
   hass_value_template: "{{ value | round(1) }}"
   hass_state_class: measurement
 
@@ -1057,7 +1054,7 @@
   writable: true
   mqtt: on_grid_soc_switch
   group: config
-  hass_component_type: binary_sensor
+  hass_component_type: switch
   hass_payload_on: "1"
   hass_payload_off: "0"
 
@@ -1070,6 +1067,7 @@
   writable: true
   mqtt: on_grid_soc_limit
   group: config
+  hass_component_type: number
   hass_value_template: "{{ value | round(1) }}"
   hass_state_class: measurement
 
@@ -1080,7 +1078,7 @@
   writable: true
   mqtt: off_grid_soc_switch
   group: config
-  hass_component_type: binary_sensor
+  hass_component_type: switch
   hass_payload_on: "1"
   hass_payload_off: "0"
 
@@ -1093,6 +1091,7 @@
   writable: true
   mqtt: off_grid_soc_limit
   group: config
+  hass_component_type: number
   hass_value_template: "{{ value | round(1) }}"
   hass_state_class: measurement
 

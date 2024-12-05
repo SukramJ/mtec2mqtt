@@ -14,6 +14,9 @@ DEFAULT_FRAMER: Final = "rtu"
 MTEC_TOPIC_ROOT: Final = "MTEC"
 MTEC_PREFIX: Final = "MTEC_"
 UTF8: Final = "utf-8"
+ENV_XDG_CONFIG_HOME: Final = "XDG_CONFIG_HOME"
+ENV_APPDATA: Final = "APPDATA"
+FILE_REGISTERS: Final = "registers.yaml"
 
 
 class Config(StrEnum):
@@ -38,7 +41,17 @@ class Config(StrEnum):
     REFRESH_CONFIG = "REFRESH_CONFIG"
     REFRESH_DAY = "REFRESH_DAY"
     REFRESH_NOW = "REFRESH_NOW"
+    REFRESH_STATIC = "REFRESH_STATIC"
     REFRESH_TOTAL = "REFRESH_TOTAL"
+
+
+REFRESH_DEFAULTS: Final = {
+    Config.REFRESH_CONFIG: 30,
+    Config.REFRESH_DAY: 300,
+    Config.REFRESH_NOW: 10,
+    Config.REFRESH_STATIC: 3600,
+    Config.REFRESH_TOTAL: 310,
+}
 
 
 class HA(StrEnum):
@@ -47,6 +60,7 @@ class HA(StrEnum):
     COMMAND_TOPIC = "command_topic"
     DEVICE = "device"
     DEVICE_CLASS = "device_class"
+    ENABLED_BY_DEFAULT = "enabled_by_default"
     IDENTIFIERS = "identifiers"
     MANUFACTURER = "manufacturer"
     MODEL = "model"
@@ -69,6 +83,7 @@ class HAPlatform(StrEnum):
     """Enum with HA platform."""
 
     BINARY_SENSOR = "binary_sensor"
+    NUMBER = "number"
     SELECT = "select"
     SENSOR = "sensor"
     SWITCH = "switch"
@@ -100,15 +115,16 @@ class Register(StrEnum):
 class RegisterGroup(StrEnum):
     """Enum with Register group qualifiers."""
 
-    BASE = "now-base"
-    GRID = "now-grid"
-    INVERTER = "now-inverter"
     BACKUP = "now-backup"
+    BASE = "now-base"
     BATTERY = "now-battery"
-    PV = "now-pv"
     CONFIG = "config"
     DAY = "day"
+    GRID = "now-grid"
+    INVERTER = "now-inverter"
+    PV = "now-pv"
     TOTAL = "total"
+    STATIC = "static"
 
 
 SECONDARY_REGISTER_GROUPS: Final = {
@@ -117,4 +133,16 @@ SECONDARY_REGISTER_GROUPS: Final = {
     2: RegisterGroup.BACKUP,
     3: RegisterGroup.BATTERY,
     4: RegisterGroup.PV,
+}
+
+MANDATORY_PARAMETERS: Final = [Register.NAME]
+
+OPTIONAL_PARAMETERS: Final = {
+    Register.LENGTH: None,
+    Register.TYPE: None,
+    Register.UNIT: "",
+    Register.SCALE: 1,
+    Register.WRITABLE: False,
+    Register.MQTT: None,
+    Register.GROUP: None,
 }

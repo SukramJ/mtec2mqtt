@@ -13,9 +13,18 @@ import signal
 import time
 from typing import Any, Final
 
+from paho.mqtt import client as paho
+
 from mtec2mqtt import hass_int, modbus_client, mqtt_client
 from mtec2mqtt.config import init_config, init_register_map
-from mtec2mqtt.const import SECONDARY_REGISTER_GROUPS, Config, Register, RegisterGroup
+from mtec2mqtt.const import (
+    REFRESH_DEFAULTS,
+    SECONDARY_REGISTER_GROUPS,
+    UTF8,
+    Config,
+    Register,
+    RegisterGroup,
+)
 
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -44,19 +53,33 @@ class MtecCoordinator:
             if config[Config.HASS_ENABLE]
             else None
         )
-        self._mqtt_client: Final = mqtt_client.MqttClient(config=config, hass=self._hass)
         self._modbus_client: Final = modbus_client.MTECModbusClient(
             config=config,
             register_map=self._register_map,
             register_groups=register_groups,
         )
+        self._mqtt_client: Final = mqtt_client.MqttClient(
+            config=config, on_mqtt_message=self._on_mqtt_message, hass=self._hass
+        )
 
         self._mqtt_float_format: Final[str] = config[Config.MQTT_FLOAT_FORMAT]
-        self._mqtt_refresh_config: Final[int] = config[Config.REFRESH_CONFIG]
-        self._mqtt_refresh_day: Final[int] = config[Config.REFRESH_DAY]
-        self._mqtt_refresh_now: Final[int] = config[Config.REFRESH_NOW]
-        self._mqtt_refresh_total: Final[int] = config[Config.REFRESH_TOTAL]
+        self._mqtt_refresh_config: Final[int] = config.get(
+            Config.REFRESH_CONFIG, REFRESH_DEFAULTS[Config.REFRESH_CONFIG]
+        )
+        self._mqtt_refresh_day: Final[int] = config.get(
+            Config.REFRESH_DAY, REFRESH_DEFAULTS[Config.REFRESH_DAY]
+        )
+        self._mqtt_refresh_now: Final[int] = config.get(
+            Config.REFRESH_NOW, REFRESH_DEFAULTS[Config.REFRESH_NOW]
+        )
+        self._mqtt_refresh_static: Final[int] = config.get(
+            Config.REFRESH_STATIC, REFRESH_DEFAULTS[Config.REFRESH_STATIC]
+        )
+        self._mqtt_refresh_total: Final[int] = config.get(
+            Config.REFRESH_TOTAL, REFRESH_DEFAULTS[Config.REFRESH_TOTAL]
+        )
         self._mqtt_topic: Final[str] = config[Config.MQTT_TOPIC]
+        self._hass_birth_gracetime: Final[int] = config.get(Config.HASS_BIRTH_GRACETIME, 15)
 
         if config[Config.DEBUG] is True:
             logging.getLogger().setLevel(level=logging.DEBUG)
@@ -76,6 +99,7 @@ class MtecCoordinator:
         next_read_config = datetime.now()
         next_read_day = datetime.now()
         next_read_total = datetime.now()
+        next_read_static = datetime.now()
         now_ext_idx = 0
 
         self._modbus_client.connect()
@@ -83,7 +107,7 @@ class MtecCoordinator:
         # Initialize
         pv_config = None
         while not pv_config:
-            if not (pv_config := self.read_mtec_data(group=RegisterGroup.CONFIG)):
+            if not (pv_config := self.read_mtec_data(group=RegisterGroup.STATIC)):
                 _LOGGER.warning("Can't retrieve initial config - retry in 10 s")
                 time.sleep(10)
 
@@ -104,6 +128,15 @@ class MtecCoordinator:
             # Now base
             if pvdata := self.read_mtec_data(group=RegisterGroup.BASE):
                 self.write_to_mqtt(pvdata=pvdata, topic_base=topic_base, group=RegisterGroup.BASE)
+
+            # Config
+            if next_read_config <= now and (
+                pvdata := self.read_mtec_data(group=RegisterGroup.CONFIG)
+            ):
+                self.write_to_mqtt(
+                    pvdata=pvdata, topic_base=topic_base, group=RegisterGroup.CONFIG
+                )
+                next_read_config = datetime.now() + timedelta(seconds=self._mqtt_refresh_config)
 
             # Now extended - read groups in a round-robin - one per loop
             if (group := SECONDARY_REGISTER_GROUPS.get(now_ext_idx)) and (
@@ -128,18 +161,47 @@ class MtecCoordinator:
                 self.write_to_mqtt(pvdata=pvdata, topic_base=topic_base, group=RegisterGroup.TOTAL)
                 next_read_total = datetime.now() + timedelta(seconds=self._mqtt_refresh_total)
 
-            # Config
-            if next_read_config <= now and (
-                pvdata := self.read_mtec_data(group=RegisterGroup.CONFIG)
+            # Static
+            if next_read_static <= now and (
+                pvdata := self.read_mtec_data(group=RegisterGroup.STATIC)
             ):
                 self.write_to_mqtt(
-                    pvdata=pvdata, topic_base=topic_base, group=RegisterGroup.CONFIG
+                    pvdata=pvdata, topic_base=topic_base, group=RegisterGroup.STATIC
                 )
-                next_read_config = datetime.now() + timedelta(seconds=self._mqtt_refresh_config)
+                next_read_static = datetime.now() + timedelta(seconds=self._mqtt_refresh_static)
 
             refresh_now_interval = self._mqtt_refresh_now
             _LOGGER.debug("Sleep %ss", refresh_now_interval)
             time.sleep(refresh_now_interval)
+
+    def _on_mqtt_message(
+        self,
+        client: Any,
+        userdata: Any,
+        message: paho.MQTTMessage,
+    ) -> None:
+        """Handle received message."""
+        try:
+            msg = message.payload.decode(UTF8)
+            if msg == "online" and self._hass is not None:
+                gracetime = self._hass_birth_gracetime
+                _LOGGER.info(
+                    "Received HASS online message. Sending discovery info in %i sec", gracetime
+                )
+                time.sleep(
+                    gracetime
+                )  # dirty workaround: hass requires some grace period for being ready to receive discovery info
+                self._hass.send_discovery_info()
+            else:
+                topic = message.topic.split("/")
+                group = topic[2]
+                register_name = topic[3]
+                self._modbus_client.write_register_by_name(name=register_name, value=msg)
+                if topic[2] != RegisterGroup.BASE:
+                    time.sleep(10)
+                    self.read_mtec_data(group=RegisterGroup(group))
+        except Exception as e:
+            _LOGGER.warning("Error while handling MQTT message: %s", str(e))
 
     def read_mtec_data(self, group: RegisterGroup) -> PVDATA_TYPE:
         """Read data from MTEC modbus."""
