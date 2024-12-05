@@ -165,6 +165,7 @@ class HassIntegration:
             HA.COMMAND_TOPIC: f"{mtec_topic}/set",
             HA.DEVICE: self._device_info,
             HA.ENABLED_BY_DEFAULT: False,
+            HA.MODE: "box",
             HA.NAME: item[Register.NAME],
             HA.STATE_TOPIC: f"{mtec_topic}/state",
             HA.UNIQUE_ID: f"{MTEC_PREFIX}{item[Register.MQTT]}",

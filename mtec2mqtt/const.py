@@ -50,7 +50,7 @@ REFRESH_DEFAULTS: Final = {
     Config.REFRESH_DAY: 300,
     Config.REFRESH_NOW: 10,
     Config.REFRESH_STATIC: 3600,
-    Config.REFRESH_TOTAL: 310,
+    Config.REFRESH_TOTAL: 300,
 }
 
 
@@ -63,6 +63,7 @@ class HA(StrEnum):
     ENABLED_BY_DEFAULT = "enabled_by_default"
     IDENTIFIERS = "identifiers"
     MANUFACTURER = "manufacturer"
+    MODE = "mode"
     MODEL = "model"
     NAME = "name"
     OPTIONS = "options"

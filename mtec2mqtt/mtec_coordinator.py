@@ -170,9 +170,8 @@ class MtecCoordinator:
                 )
                 next_read_static = datetime.now() + timedelta(seconds=self._mqtt_refresh_static)
 
-            refresh_now_interval = self._mqtt_refresh_now
-            _LOGGER.debug("Sleep %ss", refresh_now_interval)
-            time.sleep(refresh_now_interval)
+            _LOGGER.debug("Sleep %ss", self._mqtt_refresh_now)
+            time.sleep(self._mqtt_refresh_now)
 
     def _on_mqtt_message(
         self,
@@ -194,12 +193,8 @@ class MtecCoordinator:
                 self._hass.send_discovery_info()
             else:
                 topic = message.topic.split("/")
-                group = topic[2]
                 register_name = topic[3]
                 self._modbus_client.write_register_by_name(name=register_name, value=msg)
-                if topic[2] != RegisterGroup.BASE:
-                    time.sleep(10)
-                    self.read_mtec_data(group=RegisterGroup(group))
         except Exception as e:
             _LOGGER.warning("Error while handling MQTT message: %s", str(e))
 
