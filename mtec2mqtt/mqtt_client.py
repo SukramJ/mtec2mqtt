@@ -7,14 +7,15 @@ MQTT client base implementation.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from copy import copy
 import logging
-import time
 from typing import Any, Final
 
 from paho.mqtt import client as paho
 
 from mtec2mqtt import hass_int
-from mtec2mqtt.const import CLIENT_ID, UTF8, Config
+from mtec2mqtt.const import CLIENT_ID, Config
 from mtec2mqtt.exceptions import MtecException
 
 _LOGGER: Final = logging.getLogger(__name__)
@@ -24,9 +25,13 @@ class MqttClient:
     """Client for mqtt."""
 
     def __init__(
-        self, config: dict[str, Any], hass: hass_int.HassIntegration | None = None
+        self,
+        config: dict[str, Any],
+        on_mqtt_message: Callable,
+        hass: hass_int.HassIntegration | None = None,
     ) -> None:
         """Init the mqtt client."""
+        self._on_mqtt_message = on_mqtt_message
         self._hass = hass
         self._username: Final[str] = config[Config.MQTT_LOGIN]
         self._password: Final[str] = config[Config.MQTT_PASSWORD]
@@ -37,34 +42,12 @@ class MqttClient:
         self._hostname: Final[str] = config[Config.MQTT_SERVER]
         self._port: Final[int] = config[Config.MQTT_PORT]
         self._hass_base_topic: Final[str] = config[Config.HASS_BASE_TOPIC]
-        self._hass_birth_gracetime: Final[int] = config.get(Config.HASS_BIRTH_GRACETIME, 15)
         self._client = self._start()
+        self._subscribed_topics: set[str] = set()
 
     def on_mqtt_connect(self, *args: Any) -> None:
         """Handle mqtt connect."""
         _LOGGER.info("Connected to MQTT broker")
-
-    def on_mqtt_message(
-        self,
-        client: paho.Client,
-        userdata: Any,
-        message: paho.MQTTMessage,
-    ) -> None:
-        """Handle received message."""
-        try:
-            msg = message.payload.decode(UTF8)
-            # topic = message.topic.split("/")
-            if msg == "online" and self._hass is not None:
-                gracetime = self._hass_birth_gracetime
-                _LOGGER.info(
-                    "Received HASS online message. Sending discovery info in %i sec", gracetime
-                )
-                time.sleep(
-                    gracetime
-                )  # dirty workaround: hass requires some grace period for being ready to receive discovery info
-                self._hass.send_discovery_info()
-        except Exception as e:
-            _LOGGER.warning("Error while handling MQTT message: %s", str(e))
 
     def _start(self) -> paho.Client:
         """Start the MQTT client."""
@@ -76,7 +59,7 @@ class MqttClient:
             if self._hass:
                 client.subscribe(topic=self._hass_base_topic + "/status")
             client.on_connect = self.on_mqtt_connect
-            client.on_message = self.on_mqtt_message
+            client.on_message = self._on_mqtt_message
             client.loop_start()
             _LOGGER.info("MQTT server started")
         except Exception as ex:
@@ -89,6 +72,8 @@ class MqttClient:
     def stop(self) -> None:
         """Stop the MQTT client."""
         try:
+            for topic in copy(self._subscribed_topics):
+                self.unsubscribe(topic=topic)
             self._client.loop_stop()
             _LOGGER.info("MQTT server stopped")
         except Exception as e:
@@ -101,3 +86,25 @@ class MqttClient:
             self._client.publish(topic=topic, payload=payload, retain=retain)
         except Exception as e:
             _LOGGER.error("Couldn't send MQTT command: %s", str(e))
+
+    def subscribe(self, topic: str) -> None:
+        """Subscribe on topic payload."""
+        _LOGGER.debug("subscribe on %s", topic)
+        try:
+            if topic in self._subscribed_topics:
+                return
+            self._client.subscribe(topic=topic)
+            self._subscribed_topics.add(topic)
+        except Exception as ex:
+            _LOGGER.error("Couldn't subscribe on MQTT topic: %s: %s", topic, ex)
+
+    def unsubscribe(self, topic: str) -> None:
+        """Unsubscribe from topic payload."""
+        _LOGGER.debug("unsubscribe from %s", topic)
+        try:
+            if topic not in self._subscribed_topics:
+                return
+            self._client.unsubscribe(topic=topic)
+            self._subscribed_topics.remove(topic)
+        except Exception as ex:
+            _LOGGER.error("Couldn't unsubscribe from MQTT topic: %s: %s", topic, ex)
