@@ -65,6 +65,7 @@ class HA(StrEnum):
     MANUFACTURER = "manufacturer"
     MODE = "mode"
     MODEL = "model"
+    MODEL_ID = "model_id"
     NAME = "name"
     OPTIONS = "options"
     PAYLOAD_OFF = "payload_off"
@@ -77,7 +78,6 @@ class HA(StrEnum):
     SW_VERSION = "sw_version"
     UNIT_OF_MEASUREMENT = "unit_of_measurement"
     VALUE_TEMPLATE = "value_template"
-    VIA_DEVICE = "via_device"
 
 
 class HAPlatform(StrEnum):
@@ -93,10 +93,11 @@ class HAPlatform(StrEnum):
 class Register(StrEnum):
     """Enum with Register qualifiers."""
 
+    COMPONENT_TYPE = "hass_component_type"
     DEVICE_CLASS = "hass_device_class"
+    EQUIPMENT_INFO = "equipment_info"
     FIRMWARE_VERSION = "firmware_version"
     GROUP = "group"
-    COMPONENT_TYPE = "hass_component_type"
     LENGTH = "length"
     MQTT = "mqtt"
     NAME = "name"
@@ -146,4 +147,38 @@ OPTIONAL_PARAMETERS: Final = {
     Register.WRITABLE: False,
     Register.MQTT: None,
     Register.GROUP: None,
+}
+
+EQUIPMENT: Final = {
+    30: {
+        0: "4.0K-25A-3P",
+        1: "5.0K-25A-3P",
+        2: "6.0K-25A-3P",
+        3: "8.0K-25A-3P",
+        4: "10K-25A-3P",
+        5: "12K-25A-3P",
+        6: "10K-40A-3P",
+        7: "12K-40A-3P",
+        8: "15K-40A-3P",
+        9: "20K-40A-3P",
+    },
+    31: {
+        0: "3.0K-30A-1P",
+        1: "3.6K-30A-1P",
+        2: "4.2K-30A-1P",
+        3: "4.6K-30A-1P",
+        4: "5.0K-30A-1P",
+        5: "6.0K-30A-1P",
+        6: "7.0K-30A-1P",
+        7: "8.0K-30A-1P",
+        8: "3.0K-30A-1P-S",
+        9: "3.6K-30A-1P-S",
+    },
+    32: {
+        0: "25K-100A-3P",
+        1: "30K-100A-3P",
+        2: "36K-100A-3P",
+        3: "40K-100A-3P",
+        4: "50K-100A-3P",
+    },
 }

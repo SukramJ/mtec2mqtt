@@ -42,19 +42,23 @@ class HassIntegration:
         return self._is_initialized
 
     def initialize(
-        self, mqtt: mqtt_client.MqttClient, serial_no: str, firmware_version: str
+        self,
+        mqtt: mqtt_client.MqttClient,
+        serial_no: str,
+        firmware_version: str,
+        equipment_info: str,
     ) -> None:
         """Initialize."""
         self._mqtt = mqtt
         self._serial_no = serial_no
         self._device_info = {
             HA.IDENTIFIERS: [serial_no],
-            HA.MANUFACTURER: "MTEC",
-            HA.MODEL: "Energybutler",
-            HA.NAME: "MTEC Energybutler",
+            HA.MANUFACTURER: "M-TEC",
+            HA.MODEL: "Energy-Butler",
+            HA.MODEL_ID: equipment_info,
+            HA.NAME: "MTEC EnergyButler",
             HA.SERIAL_NUMBER: serial_no,
             HA.SW_VERSION: firmware_version,
-            HA.VIA_DEVICE: "MTECmqtt",
         }
         self._devices_array.clear()
         self._build_devices_array()
@@ -169,6 +173,7 @@ class HassIntegration:
             HA.NAME: item[Register.NAME],
             HA.STATE_TOPIC: f"{mtec_topic}/state",
             HA.UNIQUE_ID: f"{MTEC_PREFIX}{item[Register.MQTT]}",
+            HA.UNIT_OF_MEASUREMENT: item[Register.UNIT],
         }
 
         if hass_device_class := item.get(Register.DEVICE_CLASS):

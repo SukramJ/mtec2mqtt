@@ -18,6 +18,7 @@ from paho.mqtt import client as paho
 from mtec2mqtt import hass_int, modbus_client, mqtt_client
 from mtec2mqtt.config import init_config, init_register_map
 from mtec2mqtt.const import (
+    EQUIPMENT,
     REFRESH_DEFAULTS,
     SECONDARY_REGISTER_GROUPS,
     UTF8,
@@ -119,6 +120,7 @@ class MtecCoordinator:
                 mqtt=self._mqtt_client,
                 serial_no=pv_config[Register.SERIAL_NO][Register.VALUE],
                 firmware_version=pv_config[Register.FIRMWARE_VERSION][Register.VALUE],
+                equipment_info=pv_config[Register.EQUIPMENT_INFO][Register.VALUE],
             )
 
         # Main loop - exit on signal only
@@ -216,6 +218,8 @@ class MtecCoordinator:
                             data[register][Register.VALUE] = (
                                 f"V{fw0.replace(' ', '.')}-V{fw1.replace(' ', '.')}"
                             )
+                        if register == "10008":
+                            data[register][Register.VALUE] = _get_equipment_info(value=value)
                         if item.get(Register.DEVICE_CLASS) == "enum" and (
                             value_items := item.get(Register.VALUE_ITEMS)
                         ):
@@ -338,6 +342,12 @@ def _convert_code(value: int | str, value_items: dict[int, str]) -> str:
     if not faults:
         faults.append("OK")
     return ", ".join(faults)
+
+
+def _get_equipment_info(value: str) -> str:
+    """Extract the Equipment info from code."""
+    upper, lower = value.split(" ")
+    return EQUIPMENT.get(int(upper), {}).get(int(lower), "unknown")
 
 
 def _has_bit(val: int, idx: int) -> bool:

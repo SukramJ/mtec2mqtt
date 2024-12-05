@@ -97,6 +97,7 @@
   name: Equipment info
   length: 1
   type: BYTE
+  mqtt: equipment_info
   group: static
 
 "10011":
