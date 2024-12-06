@@ -81,6 +81,7 @@ class MtecCoordinator:
         )
         self._mqtt_topic: Final[str] = config[Config.MQTT_TOPIC]
         self._hass_birth_gracetime: Final[int] = config.get(Config.HASS_BIRTH_GRACETIME, 15)
+        self._hass_status_topic: Final[str] = f"{config[Config.HASS_BASE_TOPIC]}/status"
 
         if config[Config.DEBUG] is True:
             logging.getLogger().setLevel(level=logging.DEBUG)
@@ -184,19 +185,23 @@ class MtecCoordinator:
         """Handle received message."""
         try:
             msg = message.payload.decode(UTF8)
-            if msg == "online" and self._hass is not None:
-                gracetime = self._hass_birth_gracetime
-                _LOGGER.info(
-                    "Received HASS online message. Sending discovery info in %i sec", gracetime
-                )
-                time.sleep(
-                    gracetime
-                )  # dirty workaround: hass requires some grace period for being ready to receive discovery info
-                self._hass.send_discovery_info()
-            else:
-                topic = message.topic.split("/")
-                register_name = topic[3]
+            if (topic := message.topic) == self._hass_status_topic:
+                if msg == "online" and self._hass is not None:
+                    gracetime = self._hass_birth_gracetime
+                    _LOGGER.info(
+                        "Received HASS online message. Sending discovery info in %i sec", gracetime
+                    )
+                    time.sleep(
+                        gracetime
+                    )  # dirty workaround: hass requires some grace period for being ready to receive discovery info
+                    self._hass.send_discovery_info()
+                elif msg == "offline":
+                    _LOGGER.info("Received HASS offline message.")
+            elif (topic_parts := message.topic.split("/")) is not None and len(topic_parts) >= 4:
+                register_name = topic_parts[3]
                 self._modbus_client.write_register_by_name(name=register_name, value=msg)
+            else:
+                _LOGGER.warning("Received topic %s is not usable.", topic)
         except Exception as e:
             _LOGGER.warning("Error while handling MQTT message: %s", str(e))
 

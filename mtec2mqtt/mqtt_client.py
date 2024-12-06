@@ -41,7 +41,7 @@ class MqttClient:
         }
         self._hostname: Final[str] = config[Config.MQTT_SERVER]
         self._port: Final[int] = config[Config.MQTT_PORT]
-        self._hass_base_topic: Final[str] = config[Config.HASS_BASE_TOPIC]
+        self._hass_status_topic: Final[str] = f"{config[Config.HASS_BASE_TOPIC]}/status"
         self._client = self._start()
         self._subscribed_topics: set[str] = set()
 
@@ -57,7 +57,7 @@ class MqttClient:
             client.connect(host=self._hostname, port=self._port)
 
             if self._hass:
-                client.subscribe(topic=self._hass_base_topic + "/status")
+                client.subscribe(topic=self._hass_status_topic)
             client.on_connect = self.on_mqtt_connect
             client.on_message = self._on_mqtt_message
             client.loop_start()
