@@ -32,6 +32,7 @@ class MTECModbusClient:
         register_groups: list[str],
     ) -> None:
         """Init the modbus client."""
+        self._error_count = 0
         self._register_map: Final = register_map
         self._register_groups: Final = register_groups
         self._modbus_client: ModbusTcpClient = None  # type: ignore[assignment]
@@ -50,6 +51,11 @@ class MTECModbusClient:
         self.disconnect()
 
     @property
+    def error_count(self) -> int:
+        """Return the error count."""
+        return self._error_count
+
+    @property
     def register_groups(self) -> list[str]:
         """Return the register groups."""
         return self._register_groups
@@ -61,6 +67,7 @@ class MTECModbusClient:
 
     def connect(self) -> bool:
         """Connect to modbus server."""
+        self._error_count = 0
         _LOGGER.debug(
             "Connecting to server %s:%i (framer=%s)",
             self._modbus_host,
@@ -246,6 +253,7 @@ class MTECModbusClient:
             _LOGGER.error(
                 "Error while reading register %s, length %s from pymodbus", register, length
             )
+            self._error_count += 1
             return None
         if len(result.registers) != length:
             _LOGGER.error(
