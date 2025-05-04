@@ -94,7 +94,15 @@ class MtecCoordinator:
         #    hass.send_unregister_info()
         self._modbus_client.disconnect()
         self._mqtt_client.stop()
-        _LOGGER.info("Exiting")
+        _LOGGER.info("Stopping clients")
+
+    def _reconnect_modbus(self) -> None:
+        """Reconnect to modbus/mqtt."""
+        _LOGGER.info("Reconnecting modbus client.")
+        self._modbus_client.disconnect()
+        time.sleep(10)
+        self._modbus_client.connect()
+        _LOGGER.info("Reconnected modbus client.")
 
     def run(self) -> None:
         """Run the coordinator."""
@@ -126,6 +134,10 @@ class MtecCoordinator:
 
         # Main loop - exit on signal only
         while run_status:
+            # check if modbus is alive and reconnect if necessary
+            if self._modbus_client.error_count > 10:
+                self._reconnect_modbus()
+
             now = datetime.now()
 
             # Now base
