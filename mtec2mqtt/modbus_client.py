@@ -198,10 +198,10 @@ class MTECModbusClient:
         # Cache clusters to avoid unnecessary overhead
         # use stringified version of list as index
         if (idx := str(registers)) not in self._cluster_cache:
-            self._cluster_cache[idx] = self._create_register_clusters(registers=registers)
+            self._cluster_cache[idx] = self._generate_register_clusters(registers=registers)
         return self._cluster_cache[idx]
 
-    def _create_register_clusters(self, registers: list[str]) -> list[dict[str, Any]]:
+    def _generate_register_clusters(self, registers: list[str]) -> list[dict[str, Any]]:
         """Create clusters."""
         cluster: dict[str, Any] = {"start": 0, Register.LENGTH: 0, "items": []}
         cluster_list: list[dict[str, Any]] = []

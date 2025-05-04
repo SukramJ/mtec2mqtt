@@ -76,7 +76,7 @@ class HassIntegration:
             if HA.COMMAND_TOPIC in payload:
                 data = json.loads(payload)
                 if command_topic := data.get(HA.COMMAND_TOPIC):
-                    self._mqtt.subscribe(topic=command_topic)
+                    self._mqtt.subscribe_to_topic(topic=command_topic)
 
     def send_unregister_info(self) -> None:
         """Send unregister info."""
