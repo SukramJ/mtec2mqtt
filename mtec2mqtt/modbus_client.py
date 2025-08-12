@@ -269,9 +269,21 @@ class MTECModbusClient:
         """Decode the result from rawdata, starting at offset."""
         dt = self._modbus_client.DATATYPE
         try:
-            val: int | float | str | list[bool] | list[int] | list[float]
+            val = None
             item_type = str(item[Register.TYPE])
             item_length = int(item[Register.LENGTH])
+
+            # sanity check: ensure we have enough data
+            if offset < 0 or item_length <= 0 or offset + item_length > len(rawdata.registers):
+                _LOGGER.error(
+                    "Decoding bounds error (type=%s, offset=%s, length=%s, available=%s)",
+                    item_type,
+                    offset,
+                    item_length,
+                    len(rawdata.registers),
+                )
+                return {}
+
             if item_type == "U16":
                 reg = rawdata.registers[offset : offset + 1]
                 val = self._modbus_client.convert_from_registers(
@@ -292,53 +304,79 @@ class MTECModbusClient:
                 if item_length == 1:
                     reg1 = int(rawdata.registers[offset])
                     val = f"{reg1 >> 8:02d} {reg1 & 0xFF:02d}"
-                    # val = f"{decoder.decode_8bit_uint():08b}"
                 elif item_length == 2:
                     reg1 = int(rawdata.registers[offset])
                     reg2 = int(rawdata.registers[offset + 1])
                     val = f"{reg1 >> 8:02d} {reg1 & 0xFF:02d}  {reg2 >> 8:02d} {reg2 & 0xFF:02d}"
-                    # val = f"{decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}  {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}"
                 elif item_length == 4:
                     reg1 = int(rawdata.registers[offset])
                     reg2 = int(rawdata.registers[offset + 1])
                     reg3 = int(rawdata.registers[offset + 2])
                     reg4 = int(rawdata.registers[offset + 3])
-                    val = f"{reg1 >> 8:02d} {reg1 & 0xFF:02d} {reg2 >> 8:02d} {reg2 & 0xFF:02d}  {reg3 >> 8:02d} {reg3 & 0xFF:02d} {reg4 >> 8:02d} {reg4 & 0xFF:02d}"
-                    # val = f"{decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}  {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}"
+                    val = (
+                        f"{reg1 >> 8:02d} {reg1 & 0xFF:02d} {reg2 >> 8:02d} {reg2 & 0xFF:02d}  "
+                        f"{reg3 >> 8:02d} {reg3 & 0xFF:02d} {reg4 >> 8:02d} {reg4 & 0xFF:02d}"
+                    )
+                else:
+                    _LOGGER.error("Unsupported BYTE length: %s", item_length)
+                    return {}
             elif item_type == "BIT":
                 if item_length == 1:
                     reg1 = int(rawdata.registers[offset])
-                    val = f"{reg1:08b}"
-                    # val = f"{decoder.decode_8bit_uint():08b}"
-                if item_length == 2:
+                    val = f"{reg1:016b}"
+                elif item_length == 2:
                     reg1 = int(rawdata.registers[offset])
                     reg2 = int(rawdata.registers[offset + 1])
-                    val = f"{reg1:08b} {reg2:08b}"
-                    # val = f"{decoder.decode_8bit_uint():08b} {decoder.decode_8bit_uint():08b}"
+                    val = f"{reg1:016b} {reg2:016b}"
+                else:
+                    # support generic N registers as concatenated 16-bit groups
+                    bits = [
+                        f"{int(rawdata.registers[offset + i]):016b}" for i in range(item_length)
+                    ]
+                    val = " ".join(bits)
             elif item_type == "DAT":
+                if offset + 3 > len(rawdata.registers):
+                    _LOGGER.error("DAT requires 3 registers but not enough data available")
+                    return {}
                 reg1 = int(rawdata.registers[offset])
                 reg2 = int(rawdata.registers[offset + 1])
                 reg3 = int(rawdata.registers[offset + 2])
-                val = f"{reg1 >> 8:02d}-{reg1 & 0xFF:02d}-{reg2 >> 8:02d} {reg2 & 0xFF:02d}:{reg3 >> 8:02d}:{reg3 & 0xFF:02d}"
-                # val = f"{decoder.decode_8bit_uint():02d}-{decoder.decode_8bit_uint():02d}-{decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}:{decoder.decode_8bit_uint():02d}:{decoder.decode_8bit_uint():02d}"
+                val = (
+                    f"{reg1 >> 8:02d}-{reg1 & 0xFF:02d}-{reg2 >> 8:02d} "
+                    f"{reg2 & 0xFF:02d}:{reg3 >> 8:02d}:{reg3 & 0xFF:02d}"
+                )
             elif item_type == "STR":
-                reg = rawdata.registers[offset : offset + item["length"] * 2 + 1]
-                val = self._modbus_client.convert_from_registers(
+                # item_length defines number of 16-bit registers to read
+                reg = rawdata.registers[offset : offset + item_length]
+                sval = self._modbus_client.convert_from_registers(
                     registers=reg, data_type=dt.STRING
                 )
-                # val = decoder.decode_string(item_length * 2).decode()
+                # strip trailing null bytes and spaces without using multi-character rstrip (B005)
+                if isinstance(sval, str):
+                    # First remove spaces, then nulls, then spaces again to catch sequences like " \x00 "
+                    val = sval.rstrip(" ").rstrip("\x00").rstrip(" ")
+                else:
+                    val = sval
             else:
                 _LOGGER.error("Unknown type %s to decode", item_type)
                 return {}
 
-            item_scale = int(item[Register.SCALE])
-            if isinstance(val, float) and val and item_scale > 1:
-                val /= item_scale
+            # apply scaling to numeric values
+            item_scale = int(item.get(Register.SCALE, 1))
+            if item_scale > 1 and isinstance(val, (int, float)):
+                val = float(val) / item_scale
+
             return {
                 Register.NAME: item[Register.NAME],
                 Register.VALUE: val,
-                Register.UNIT: item[Register.UNIT],
+                Register.UNIT: item.get(Register.UNIT, ""),
             }
         except Exception as ex:
-            _LOGGER.error("Exception while decoding data: %s", ex)
+            _LOGGER.error(
+                "Exception while decoding data (type=%s, offset=%s, length=%s): %s",
+                item.get(Register.TYPE),
+                offset,
+                item.get(Register.LENGTH),
+                ex,
+            )
             return {}
