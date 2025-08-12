@@ -1,10 +1,10 @@
-# M-TEC espressif MODBUS server
-MODBUS_IP: espressif # IP address / hostname of "espressif" modbus server
+# M-TEC external MODBUS RTU server
+MODBUS_IP: 0.0.0.0 # IP address / hostname of "espressif" modbus server
 MODBUS_PORT: 502 # Port (usually no change required)
-MODBUS_SLAVE: 252 # Modbus slave id (usually no change required)
+MODBUS_SLAVE: 247 # Modbus slave id (usually no change required)
 MODBUS_TIMEOUT: 5 # Timeout for Modbus server (s)
 MODBUS_RETRIES: 3 # Retries
-MODBUS_FRAMER: rtu # Modbus Framer (usually no change required; options: 'ascii', 'binary', 'rtu', 'socket', 'tls')
+MODBUS_FRAMER: socket # Modbus Framer (usually no change required; options: 'ascii', 'binary', 'rtu', 'socket', 'tls')
 
 # MQTT settings
 MQTT_SERVER: localhost # MQTT server
