@@ -58,7 +58,7 @@ class MqttClient:
             client.connect(host=self._hostname, port=self._port)
 
             if self._hass:
-                client.subscribe_to_topic(topic=self._hass_status_topic)
+                client.subscribe(topic=self._hass_status_topic)
             client.on_connect = self.on_mqtt_connect
             client.on_message = self._on_mqtt_message
             client.loop_start()
@@ -94,7 +94,7 @@ class MqttClient:
         try:
             if topic in self._subscribed_topics:
                 return
-            self._client.subscribe_to_topic(topic=topic)
+            self._client.subscribe(topic=topic)
             self._subscribed_topics.add(topic)
         except Exception as ex:
             _LOGGER.error("Couldn't subscribe on MQTT topic: %s: %s", topic, ex)
@@ -105,7 +105,7 @@ class MqttClient:
         try:
             if topic not in self._subscribed_topics:
                 return
-            self._client.unsubscribe_from_topic(topic=topic)
+            self._client.unsubscribe(topic=topic)
             self._subscribed_topics.remove(topic)
         except Exception as ex:
             _LOGGER.error("Couldn't unsubscribe from MQTT topic: %s: %s", topic, ex)
