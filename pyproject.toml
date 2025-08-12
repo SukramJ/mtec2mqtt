@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools==75.6.0"]
+requires = ["setuptools==80.9.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -26,10 +26,10 @@ classifiers = [
 requires-python = ">=3.11.0"
 dependencies    = [
     "pyyaml>=6.0.2",
-    "PyModbus == 3.7.4",
+    "PyModbus == 3.11.1",
     "paho-mqtt>=2.1.0",
-    "python-slugify>=8.0.0",
-    "voluptuous>=0.14.0",
+    "python-slugify>=8.0.4",
+    "voluptuous>=0.15.2",
 ]
 
 [project.urls]
@@ -468,7 +468,6 @@ lint.select = [
     "S317", # suspicious-xml-sax-usage
     "S318", # suspicious-xml-mini-dom-usage
     "S319", # suspicious-xml-pull-dom-usage
-    "S320", # suspicious-xmle-tree-usage
     "S601", # paramiko-call
     "S602", # subprocess-popen-with-shell-equals-true
     "S604", # call-with-shell-equals-true

@@ -46,9 +46,22 @@ class MqttClient:
         self._client = self._initialize_client()
         self._subscribed_topics: set[str] = set()
 
-    def on_mqtt_connect(self, *args: Any) -> None:
+    def _on_mqtt_connect(
+        self, mqttclient: mqtt.Client, userdata: Any, flags: Any, rc: Any
+    ) -> None:
         """Handle mqtt connect."""
-        _LOGGER.info("Connected to MQTT broker")
+        if rc == 0:
+            _LOGGER.info("Connected to MQTT broker")
+        else:
+            _LOGGER.error("Error while connecting to MQTT broker: rc=%s", rc)
+
+    def _on_mqtt_disconnect(self, mqttclient: mqtt.Client, userdata: Any, rc: Any) -> None:
+        _LOGGER.warning("MQTT broker disconnected: rc=%s", rc)
+
+    def _on_mqtt_subscribe(
+        self, mqttclient: mqtt.Client, userdata: Any, mid: Any, granted_qos: Any
+    ) -> None:
+        _LOGGER.info("MQTT broker subscribed to mid %s", mid)
 
     def _initialize_client(self) -> mqtt.Client:
         """Initialize and start the MQTT client."""
@@ -59,8 +72,10 @@ class MqttClient:
 
             if self._hass:
                 client.subscribe(topic=self._hass_status_topic)
-            client.on_connect = self.on_mqtt_connect
+            client.on_connect = self._on_mqtt_connect
             client.on_message = self._on_mqtt_message
+            client.on_subscribe = self._on_mqtt_subscribe
+            client.on_disconnect = self._on_mqtt_disconnect
             client.loop_start()
             _LOGGER.info("MQTT server started")
         except Exception as ex:

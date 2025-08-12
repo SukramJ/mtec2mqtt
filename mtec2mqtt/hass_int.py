@@ -147,7 +147,7 @@ class HassIntegration:
             HA.DEVICE: self._device_info,
             HA.ENABLED_BY_DEFAULT: True,
             HA.NAME: item[Register.NAME],
-            HA.STATE_TOPIC: f"{MTEC_TOPIC_ROOT}/{ self._serial_no}/{item[Register.GROUP]}/{item[Register.MQTT]}/state",
+            HA.STATE_TOPIC: f"{MTEC_TOPIC_ROOT}/{self._serial_no}/{item[Register.GROUP]}/{item[Register.MQTT]}/state",
             HA.UNIQUE_ID: f"{MTEC_PREFIX}{item[Register.MQTT]}",
         }
 
@@ -185,7 +185,7 @@ class HassIntegration:
     def _append_select(self, item: dict[str, Any]) -> None:
         options = item[Register.VALUE_ITEMS]
         mtec_topic = (
-            f"{MTEC_TOPIC_ROOT}/{ self._serial_no}/{item[Register.GROUP]}/{item[Register.MQTT]}"
+            f"{MTEC_TOPIC_ROOT}/{self._serial_no}/{item[Register.GROUP]}/{item[Register.MQTT]}"
         )
         data_item = {
             HA.COMMAND_TOPIC: f"{mtec_topic}/set",
