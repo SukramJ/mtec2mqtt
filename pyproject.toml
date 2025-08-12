@@ -18,12 +18,10 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)",
     "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Home Automation",
 ]
-requires-python = ">=3.11.0"
+requires-python = ">=3.13.0"
 dependencies    = [
     "pyyaml>=6.0.2",
     "PyModbus == 3.11.1",
@@ -57,7 +55,7 @@ exclude = ["tests", "tests.*", "dist", "build"]
 mtec2mqtt = ["py.typed", "*.yaml"]
 
 [tool.pylint.MAIN]
-py-version = "3.11"
+py-version = "3.13"
 ignore = [
     "tests",
 ]
