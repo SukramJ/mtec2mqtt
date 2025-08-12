@@ -11,11 +11,9 @@ import logging
 from typing import Any, Final, cast
 
 from pymodbus.client import ModbusTcpClient
-from pymodbus.constants import Endian
 from pymodbus.exceptions import ModbusException
 from pymodbus.framer import FramerType
-from pymodbus.payload import BinaryPayloadDecoder
-from pymodbus.pdu.register_read_message import ReadHoldingRegistersResponse
+from pymodbus.pdu.register_message import ReadHoldingRegistersResponse
 
 from mtec2mqtt.const import DEFAULT_FRAMER, Config, Register, RegisterGroup
 
@@ -140,7 +138,7 @@ class MTECModbusClient:
                 for item in reg_cluster["items"]:
                     if item.get(Register.TYPE):  # type==None means dummy
                         register = str(reg_cluster["start"] + offset)
-                        if data_decoded := _decode_rawdata(
+                        if data_decoded := self._decode_rawdata(
                             rawdata=rawdata, offset=offset, item=item
                         ):
                             data.update({register: data_decoded})
@@ -189,7 +187,7 @@ class MTECModbusClient:
 
         try:
             result = self._modbus_client.write_register(
-                address=int(register), value=int(value), slave=self._modbus_slave
+                address=int(register), value=int(value), device_id=self._modbus_slave
             )
         except Exception as ex:
             _LOGGER.error("Exception while writing register %s to pymodbus: %s", register, ex)
@@ -238,7 +236,7 @@ class MTECModbusClient:
             result: ReadHoldingRegistersResponse = cast(
                 ReadHoldingRegistersResponse,
                 self._modbus_client.read_holding_registers(
-                    address=int(register), count=length, slave=self._modbus_slave
+                    address=int(register), count=length, device_id=self._modbus_slave
                 ),
             )
         except ModbusException as ex:
@@ -265,55 +263,82 @@ class MTECModbusClient:
             return None
         return result
 
+    def _decode_rawdata(
+        self, rawdata: ReadHoldingRegistersResponse, offset: int, item: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Decode the result from rawdata, starting at offset."""
+        dt = self._modbus_client.DATATYPE
+        try:
+            val: int | float | str | list[bool] | list[int] | list[float]
+            item_type = str(item[Register.TYPE])
+            item_length = int(item[Register.LENGTH])
+            if item_type == "U16":
+                reg = rawdata.registers[offset : offset + 1]
+                val = self._modbus_client.convert_from_registers(
+                    registers=reg, data_type=dt.UINT16
+                )
+            elif item_type == "I16":
+                reg = rawdata.registers[offset : offset + 1]
+                val = self._modbus_client.convert_from_registers(registers=reg, data_type=dt.INT16)
+            elif item_type == "U32":
+                reg = rawdata.registers[offset : offset + 2]
+                val = self._modbus_client.convert_from_registers(
+                    registers=reg, data_type=dt.UINT32
+                )
+            elif item_type == "I32":
+                reg = rawdata.registers[offset : offset + 2]
+                val = self._modbus_client.convert_from_registers(registers=reg, data_type=dt.INT32)
+            elif item_type == "BYTE":
+                if item_length == 1:
+                    reg1 = int(rawdata.registers[offset])
+                    val = f"{reg1 >> 8:02d} {reg1 & 0xFF:02d}"
+                    # val = f"{decoder.decode_8bit_uint():08b}"
+                elif item_length == 2:
+                    reg1 = int(rawdata.registers[offset])
+                    reg2 = int(rawdata.registers[offset + 1])
+                    val = f"{reg1 >> 8:02d} {reg1 & 0xFF:02d}  {reg2 >> 8:02d} {reg2 & 0xFF:02d}"
+                    # val = f"{decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}  {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}"
+                elif item_length == 4:
+                    reg1 = int(rawdata.registers[offset])
+                    reg2 = int(rawdata.registers[offset + 1])
+                    reg3 = int(rawdata.registers[offset + 2])
+                    reg4 = int(rawdata.registers[offset + 3])
+                    val = f"{reg1 >> 8:02d} {reg1 & 0xFF:02d} {reg2 >> 8:02d} {reg2 & 0xFF:02d}  {reg3 >> 8:02d} {reg3 & 0xFF:02d} {reg4 >> 8:02d} {reg4 & 0xFF:02d}"
+                    # val = f"{decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}  {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}"
+            elif item_type == "BIT":
+                if item_length == 1:
+                    reg1 = int(rawdata.registers[offset])
+                    val = f"{reg1:08b}"
+                    # val = f"{decoder.decode_8bit_uint():08b}"
+                if item_length == 2:
+                    reg1 = int(rawdata.registers[offset])
+                    reg2 = int(rawdata.registers[offset + 1])
+                    val = f"{reg1:08b} {reg2:08b}"
+                    # val = f"{decoder.decode_8bit_uint():08b} {decoder.decode_8bit_uint():08b}"
+            elif item_type == "DAT":
+                reg1 = int(rawdata.registers[offset])
+                reg2 = int(rawdata.registers[offset + 1])
+                reg3 = int(rawdata.registers[offset + 2])
+                val = f"{reg1 >> 8:02d}-{reg1 & 0xFF:02d}-{reg2 >> 8:02d} {reg2 & 0xFF:02d}:{reg3 >> 8:02d}:{reg3 & 0xFF:02d}"
+                # val = f"{decoder.decode_8bit_uint():02d}-{decoder.decode_8bit_uint():02d}-{decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}:{decoder.decode_8bit_uint():02d}:{decoder.decode_8bit_uint():02d}"
+            elif item_type == "STR":
+                reg = rawdata.registers[offset : offset + item["length"] * 2 + 1]
+                val = self._modbus_client.convert_from_registers(
+                    registers=reg, data_type=dt.STRING
+                )
+                # val = decoder.decode_string(item_length * 2).decode()
+            else:
+                _LOGGER.error("Unknown type %s to decode", item_type)
+                return {}
 
-def _decode_rawdata(
-    rawdata: ReadHoldingRegistersResponse, offset: int, item: dict[str, Any]
-) -> dict[str, Any]:
-    """Decode the result from rawdata, starting at offset."""
-    try:
-        val = None
-        start = rawdata.registers[offset:]
-        decoder = BinaryPayloadDecoder.fromRegisters(  # type: ignore[no-untyped-call]
-            registers=start, byteorder=Endian.BIG
-        )
-        item_type = str(item[Register.TYPE])
-        item_length = int(item[Register.LENGTH])
-        if item_type == "U16":
-            val = decoder.decode_16bit_uint()
-        elif item_type == "I16":
-            val = decoder.decode_16bit_int()
-        elif item_type == "U32":
-            val = decoder.decode_32bit_uint()
-        elif item_type == "I32":
-            val = decoder.decode_32bit_int()
-        elif item_type == "BYTE":
-            if item_length == 1:
-                val = f"{decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}"
-            elif item_length == 2:
-                val = f"{decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}  {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}"
-            elif item_length == 4:
-                val = f"{decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}  {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}"
-        elif item_type == "BIT":
-            if item_length == 1:
-                val = f"{decoder.decode_8bit_uint():08b}"
-            if item_length == 2:
-                val = f"{decoder.decode_8bit_uint():08b} {decoder.decode_8bit_uint():08b}"
-        elif item_type == "DAT":
-            val = f"{decoder.decode_8bit_uint():02d}-{decoder.decode_8bit_uint():02d}-{decoder.decode_8bit_uint():02d} {decoder.decode_8bit_uint():02d}:{decoder.decode_8bit_uint():02d}:{decoder.decode_8bit_uint():02d}"
-        elif item_type == "STR":
-            val = decoder.decode_string(item_length * 2).decode()
-        else:
-            _LOGGER.error("Unknown type %s to decode", item_type)
+            item_scale = int(item[Register.SCALE])
+            if isinstance(val, float) and val and item_scale > 1:
+                val /= item_scale
+            return {
+                Register.NAME: item[Register.NAME],
+                Register.VALUE: val,
+                Register.UNIT: item[Register.UNIT],
+            }
+        except Exception as ex:
+            _LOGGER.error("Exception while decoding data: %s", ex)
             return {}
-
-        item_scale = int(item[Register.SCALE])
-        if val and item_scale > 1:
-            val /= item_scale
-        return {
-            Register.NAME: item[Register.NAME],
-            Register.VALUE: val,
-            Register.UNIT: item[Register.UNIT],
-        }
-    except Exception as ex:
-        _LOGGER.error("Exception while decoding data: %s", ex)
-        return {}

@@ -1,4 +1,4 @@
-PyModbus == 3.7.4
+PyModbus == 3.11.1
 pyyaml==6.0.2
 paho-mqtt==2.1.0
 python-slugify>=8.0.4
