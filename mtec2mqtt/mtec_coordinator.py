@@ -333,13 +333,13 @@ class MtecCoordinator:
                 if isinstance(value, float):
                     payload = self._mqtt_float_format.format(value)
                 elif isinstance(value, bool):
-                    payload = f"{value:d}"
+                    payload = "1" if value else "0"
                 else:
                     payload = value
             elif isinstance(data, float):
                 payload = self._mqtt_float_format.format(data)
             elif isinstance(data, bool):
-                payload = f"{data:d}"
+                payload = "1" if data else "0"
             else:
                 payload = str(data)
             self._mqtt_client.publish(topic=topic, payload=payload)

@@ -68,14 +68,15 @@ class MqttClient:
         try:
             client = mqtt.Client(client_id=CLIENT_ID)
             client.username_pw_set(username=self._username, password=self._password)
-            client.connect(host=self._hostname, port=self._port)
-
-            if self._hass:
-                client.subscribe(topic=self._hass_status_topic)
+            # Set handlers before connecting to avoid missing early events
             client.on_connect = self._on_mqtt_connect
             client.on_message = self._on_mqtt_message
             client.on_subscribe = self._on_mqtt_subscribe
             client.on_disconnect = self._on_mqtt_disconnect
+            client.connect(host=self._hostname, port=self._port)
+
+            if self._hass:
+                client.subscribe(topic=self._hass_status_topic)
             client.loop_start()
             _LOGGER.info("MQTT server started")
         except Exception as ex:

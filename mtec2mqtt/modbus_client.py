@@ -188,8 +188,11 @@ class MTECModbusClient:
             result = self._modbus_client.write_register(
                 address=int(register), value=int(value), device_id=self._modbus_slave
             )
+        except ModbusException as ex:
+            _LOGGER.warning("Exception while writing register %s to pymodbus: %s", register, ex)
+            return False
         except Exception as ex:
-            _LOGGER.error("Exception while writing register %s to pymodbus: %s", register, ex)
+            _LOGGER.warning("Unexpected error while writing register %s: %s", register, ex)
             return False
 
         if result.isError():
@@ -239,7 +242,7 @@ class MTECModbusClient:
                 ),
             )
         except ModbusException as ex:
-            _LOGGER.error(
+            _LOGGER.warning(
                 "Exception while reading register %s, length %s from pymodbus: %s",
                 register,
                 length,
@@ -371,7 +374,7 @@ class MTECModbusClient:
                 Register.UNIT: item.get(Register.UNIT, ""),
             }
         except Exception as ex:
-            _LOGGER.error(
+            _LOGGER.warning(
                 "Exception while decoding data (type=%s, offset=%s, length=%s): %s",
                 item.get(Register.TYPE),
                 offset,
