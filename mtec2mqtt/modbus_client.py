@@ -34,7 +34,17 @@ class MTECModbusClient:
         self._register_map: Final = register_map
         self._register_groups: Final = register_groups
         self._modbus_client: ModbusTcpClient = None  # type: ignore[assignment]
-        self._cluster_cache: Final[dict[str, list[dict[str, Any]]]] = {}
+        # Cache for computed register clusters. Keyed by a normalized tuple of numeric register addresses.
+        self._cluster_cache: Final[dict[tuple[int, ...], list[dict[str, Any]]]] = {}
+        # Precompute frequently used lookups to reduce per-call overhead
+        # Numeric registers (as strings) used when reading "all" registers
+        self._all_numeric_registers: Final[list[str]] = [r for r in register_map if r.isnumeric()]
+        # Mapping from MQTT name to numeric register string for quick writes
+        self._mqtt_name_to_register: Final[dict[str, str]] = {
+            cast(str, item.get(Register.MQTT)): reg
+            for reg, item in register_map.items()
+            if reg.isnumeric() and item.get(Register.MQTT)
+        }
 
         self._modbus_framer: Final[str] = config.get(Config.MODBUS_FRAMER, DEFAULT_FRAMER)
         self._modbus_host: Final[str] = config[Config.MODBUS_IP]
@@ -116,12 +126,8 @@ class MTECModbusClient:
         _LOGGER.debug("Retrieving data...")
 
         if registers is None:  # Create a list of all (numeric) registers
-            registers = []
-            for register in self._register_map:
-                if (
-                    register.isnumeric()
-                ):  # non-numeric registers are deemed to be calculated pseudo-registers
-                    registers.append(register)
+            # non-numeric registers are deemed to be calculated pseudo-registers
+            registers = self._all_numeric_registers
 
         cluster_list = self._get_register_clusters(registers=registers)
         for reg_cluster in cluster_list:
@@ -151,17 +157,16 @@ class MTECModbusClient:
 
     def write_register_by_name(self, name: str, value: Any) -> bool:
         """Write a value to a register with a given name."""
-        for register, item in self._register_map.items():
-            if item[Register.MQTT] == name:
-                if value_items := item.get(Register.VALUE_ITEMS):
-                    for value_modbus, value_display in value_items.items():
-                        if value_display == value:
-                            value = value_modbus
-                            continue
-                self.write_register(register=register, value=value)
-                return True
-        _LOGGER.error("Can't write unknown register with name: %s", name)
-        return False
+        if (register := self._mqtt_name_to_register.get(name)) is None:
+            _LOGGER.error("Can't write unknown register with name: %s", name)
+            return False
+        item = self._register_map[register]
+        if value_items := item.get(Register.VALUE_ITEMS):
+            for value_modbus, value_display in value_items.items():
+                if value_display == value:
+                    value = value_modbus
+                    break
+        return self.write_register(register=register, value=value)
 
     def write_register(self, register: str, value: Any) -> bool:
         """Write a value to a register."""
@@ -189,8 +194,11 @@ class MTECModbusClient:
             result = self._modbus_client.write_register(
                 address=int(register), value=int(value), device_id=self._modbus_slave
             )
-        except Exception as ex:
+        except ModbusException as ex:
             _LOGGER.error("Exception while writing register %s to pymodbus: %s", register, ex)
+            return False
+        except Exception as ex:
+            _LOGGER.error("Unexpected error while writing register %s: %s", register, ex)
             return False
 
         if result.isError():
@@ -200,30 +208,41 @@ class MTECModbusClient:
 
     def _get_register_clusters(self, registers: list[str]) -> list[dict[str, Any]]:
         """Cluster registers in order to optimize modbus traffic."""
-        # Cache clusters to avoid unnecessary overhead
-        # use stringified version of list as index
-        if (idx := str(registers)) not in self._cluster_cache:
-            self._cluster_cache[idx] = self._generate_register_clusters(registers=registers)
-        return self._cluster_cache[idx]
+        # Normalize key: use sorted unique numeric registers that exist in the map
+        key_tuple: tuple[int, ...] = tuple(
+            sorted({int(r) for r in registers if r.isnumeric() and r in self._register_map})
+        )
+        if key_tuple not in self._cluster_cache:
+            # Simple cache size guard to avoid unbounded growth in long-running processes
+            if len(self._cluster_cache) > 256:
+                self._cluster_cache.clear()
+            self._cluster_cache[key_tuple] = self._generate_register_clusters(registers=registers)
+        return self._cluster_cache[key_tuple]
 
     def _generate_register_clusters(self, registers: list[str]) -> list[dict[str, Any]]:
-        """Create clusters."""
+        """
+        Create clusters.
+
+        Optimizations:
+        - Sort numerically instead of lexicographically to ensure proper clustering.
+        - Ignore non-numeric and unknown registers early to reduce loop work.
+        """
         cluster: dict[str, Any] = {"start": 0, Register.LENGTH: 0, "items": []}
         cluster_list: list[dict[str, Any]] = []
 
-        for register in sorted(registers):
-            if register.isnumeric():  # ignore non-numeric pseudo registers
-                if item := self._register_map.get(register):
-                    if (
-                        int(register) > cluster["start"] + cluster[Register.LENGTH]
-                    ):  # there is a gap
-                        if cluster["start"] > 0:  # except for first cluster
-                            cluster_list.append(cluster)
-                        cluster = {"start": int(register), Register.LENGTH: 0, "items": []}
-                    cluster[Register.LENGTH] += item[Register.LENGTH]
-                    cluster["items"].append(item)
-                else:
-                    _LOGGER.warning("Unknown register: %s - skipped.", register)
+        numeric_regs = sorted(
+            {int(r) for r in registers if r.isnumeric() and r in self._register_map}
+        )
+        for reg in numeric_regs:
+            item = self._register_map[str(reg)]
+            # if there is a gap to the current cluster, start a new one
+            if reg > cluster["start"] + cluster[Register.LENGTH]:
+                if cluster["start"] > 0:  # append previous cluster (not the initial dummy)
+                    cluster_list.append(cluster)
+                cluster = {"start": reg, Register.LENGTH: 0, "items": []}
+            # extend current cluster by item length and append the item
+            cluster[Register.LENGTH] += item[Register.LENGTH]
+            cluster["items"].append(item)
 
         if cluster["start"] > 0:  # append last cluster
             cluster_list.append(cluster)
