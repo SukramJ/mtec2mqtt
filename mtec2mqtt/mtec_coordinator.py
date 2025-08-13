@@ -70,6 +70,18 @@ class MtecCoordinator:
             config=config, on_mqtt_message=self._on_mqtt_message, hass=self._hass
         )
 
+        # Cache register lists per group to avoid recomputing on every poll
+        self._registers_by_group: dict[RegisterGroup, list[str]] = {}
+        try:
+            for grp in self._modbus_client.register_groups:
+                # Ensure keys are of type RegisterGroup for consistent lookups
+                self._registers_by_group[RegisterGroup(grp)] = (
+                    self._modbus_client.get_register_list(group=RegisterGroup(grp))
+                )
+        except Exception:
+            # Fallback: compute lazily if anything unexpected happens
+            self._registers_by_group = {}
+
         self._mqtt_float_format: Final[str] = config[Config.MQTT_FLOAT_FORMAT]
         self._mqtt_refresh_config: Final[int] = config.get(
             Config.REFRESH_CONFIG, REFRESH_DEFAULTS[Config.REFRESH_CONFIG]
@@ -178,14 +190,14 @@ class MtecCoordinator:
             # Day
             if next_read_day <= now and (pvdata := self.read_mtec_data(group=RegisterGroup.DAY)):
                 self.write_to_mqtt(pvdata=pvdata, topic_base=topic_base, group=RegisterGroup.DAY)
-                next_read_day = datetime.now() + timedelta(seconds=self._mqtt_refresh_day)
+                next_read_day = now + timedelta(seconds=self._mqtt_refresh_day)
 
             # Total
             if next_read_total <= now and (
                 pvdata := self.read_mtec_data(group=RegisterGroup.TOTAL)
             ):
                 self.write_to_mqtt(pvdata=pvdata, topic_base=topic_base, group=RegisterGroup.TOTAL)
-                next_read_total = datetime.now() + timedelta(seconds=self._mqtt_refresh_total)
+                next_read_total = now + timedelta(seconds=self._mqtt_refresh_total)
 
             # Static
             if next_read_static <= now and (
@@ -194,7 +206,7 @@ class MtecCoordinator:
                 self.write_to_mqtt(
                     pvdata=pvdata, topic_base=topic_base, group=RegisterGroup.STATIC
                 )
-                next_read_static = datetime.now() + timedelta(seconds=self._mqtt_refresh_static)
+                next_read_static = now + timedelta(seconds=self._mqtt_refresh_static)
 
             _LOGGER.debug("Sleep %ss", self._mqtt_refresh_now)
             time.sleep(self._mqtt_refresh_now)
@@ -247,8 +259,11 @@ class MtecCoordinator:
 
     def read_mtec_data(self, group: RegisterGroup) -> PVDATA_TYPE:
         """Read data from MTEC modbus."""
-        _LOGGER.info("Reading registers for group: %s", group)
-        registers = self._modbus_client.get_register_list(group=group)
+        _LOGGER.debug("Reading registers for group: %s", group)
+        if (registers := self._registers_by_group.get(group)) is None:
+            # Lazy compute and cache if not present
+            registers = self._modbus_client.get_register_list(group=group)
+            self._registers_by_group[group] = registers
         now = datetime.now()
         data = self._modbus_client.read_modbus_data(registers=registers)
         pvdata: PVDATA_TYPE = {}
