@@ -1,5 +1,10 @@
 """
-MQTT server for M-TEC Energybutler reading modbus data.
+Coordinator/orchestrator for polling M-TEC Energybutler via Modbus and publishing values to MQTT (and Home Assistant discovery when enabled).
+
+This module manages the main lifecycle: configuration load, Modbus connection
+handling (including reconnects), scheduling periodic reads for different
+register groups, publishing to the configured MQTT topic tree, and graceful
+shutdown on OS signals.
 
 (c) 2024 by Christian Rödel
 (c) 2024 by SukramJ

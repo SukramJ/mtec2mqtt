@@ -1,4 +1,9 @@
-"""MTEC Mqtt."""
+"""
+Top-level package for mtec2mqtt.
+
+Provides MQTT publication of values read from an M-TEC Energybutler via
+Modbus, optional Home Assistant discovery integration, and small utilities.
+"""
 
 from __future__ import annotations
 

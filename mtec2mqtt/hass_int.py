@@ -1,5 +1,10 @@
 """
-Auto discovery for home assistant.
+Home Assistant MQTT discovery integration.
+
+Constructs and publishes MQTT discovery payloads for sensors, binary sensors,
+number/select/switch entities, and optional custom automations. It uses the
+register map to determine which entities should be exposed and subscribes to
+command topics for controllable entities.
 
 (c) 2024 by Christian Rödel
 (c) 2024 by SukramJ

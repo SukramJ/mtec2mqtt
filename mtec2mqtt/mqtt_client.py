@@ -1,5 +1,10 @@
 """
-MQTT client base implementation.
+MQTT client wrapper for publishing and subscribing to an MQTT broker.
+
+This module encapsulates connection management (connect, disconnect, loop),
+publication (with optional retain), and topic subscription bookkeeping. It is
+used by the coordinator and, when enabled, integrates with Home Assistant by
+subscribing to its status topic so discovery can be coordinated.
 
 (c) 2024 by Christian Rödel
 (c) 2024 by SukramJ
