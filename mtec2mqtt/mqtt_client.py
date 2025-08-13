@@ -94,7 +94,7 @@ class MqttClient:
             self._client.loop_stop()
             _LOGGER.info("MQTT server stopped")
         except Exception as ex:
-            _LOGGER.warning("Couldn't stop MQTT: %s", ex)
+            _LOGGER.error("Couldn't stop MQTT: %s", ex)
 
     def publish(self, topic: str, payload: str, retain: bool = DEFAULT_RETAIN) -> None:
         """Publish mqtt message."""
@@ -102,7 +102,7 @@ class MqttClient:
         try:
             self._client.publish(topic=topic, payload=payload, retain=retain)
         except Exception as ex:
-            _LOGGER.warning("Couldn't send MQTT command: %s", ex)
+            _LOGGER.error("Couldn't send MQTT command: %s", ex)
 
     def subscribe_to_topic(self, topic: str) -> None:
         """Subscribe on topic."""
@@ -113,7 +113,7 @@ class MqttClient:
             self._client.subscribe(topic=topic)
             self._subscribed_topics.add(topic)
         except Exception as ex:
-            _LOGGER.warning("Couldn't subscribe on MQTT topic: %s: %s", topic, ex)
+            _LOGGER.error("Couldn't subscribe on MQTT topic: %s: %s", topic, ex)
 
     def unsubscribe_from_topic(self, topic: str) -> None:
         """Unsubscribe from topic."""
@@ -124,4 +124,4 @@ class MqttClient:
             self._client.unsubscribe(topic=topic)
             self._subscribed_topics.remove(topic)
         except Exception as ex:
-            _LOGGER.warning("Couldn't unsubscribe from MQTT topic: %s: %s", topic, ex)
+            _LOGGER.error("Couldn't unsubscribe from MQTT topic: %s: %s", topic, ex)
