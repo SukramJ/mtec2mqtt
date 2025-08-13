@@ -135,6 +135,7 @@ class MtecCoordinator:
         next_read_total = datetime.now()
         next_read_static = datetime.now()
         now_ext_idx = 0
+        sec_groups_len = len(SECONDARY_REGISTER_GROUPS)
 
         self._modbus_client.connect()
 
@@ -179,14 +180,14 @@ class MtecCoordinator:
                 next_read_config = now + timedelta(seconds=self._mqtt_refresh_config)
 
             # Now extended - read groups in a round-robin - one per loop
-            if (group := SECONDARY_REGISTER_GROUPS.get(now_ext_idx)) and (
-                pvdata := self.read_mtec_data(group=group)
-            ):
-                self.write_to_mqtt(pvdata=pvdata, topic_base=topic_base, group=group)
+            if sec_groups_len:
+                if (group := SECONDARY_REGISTER_GROUPS.get(now_ext_idx)) and (
+                    pvdata := self.read_mtec_data(group=group)
+                ):
+                    self.write_to_mqtt(pvdata=pvdata, topic_base=topic_base, group=group)
 
-            # advance round-robin index efficiently without magic numbers
-            if SECONDARY_REGISTER_GROUPS:
-                now_ext_idx = (now_ext_idx + 1) % len(SECONDARY_REGISTER_GROUPS)
+                # advance round-robin index efficiently without magic numbers
+                now_ext_idx = (now_ext_idx + 1) % sec_groups_len
 
             # Day
             if next_read_day <= now and (pvdata := self.read_mtec_data(group=RegisterGroup.DAY)):
@@ -265,17 +266,19 @@ class MtecCoordinator:
             # Lazy compute and cache if not present
             registers = self._modbus_client.get_register_list(group=group)
             self._registers_by_group[group] = registers
-        now = datetime.now()
+        # Only compute current time if needed (for api-date)
+        now_str: str | None = None
         data = self._modbus_client.read_modbus_data(registers=registers)
         pvdata: PVDATA_TYPE = {}
-        try:  # assign all data
+        try:  # assign all data  # pylint: disable=too-many-nested-blocks
             RV = Register.VALUE
             RMQTT = Register.MQTT
             RDEV = Register.DEVICE_CLASS
             RVITEMS = Register.VALUE_ITEMS
             rdata = data  # local alias
+            reg_map = self._register_map  # local alias to reduce attribute lookups
             for register in registers:
-                item = self._register_map[register]
+                item = reg_map[register]
                 if mqtt_key := item[RMQTT]:
                     if register.isdigit():
                         entry = rdata[register]
@@ -334,7 +337,9 @@ class MtecCoordinator:
                                 100 * (1 - rdata["31102"][RV] / gen_total) if gen_total > 0 else 0
                             )
                         elif register == "api-date":
-                            pvdata[mqtt_key] = now.strftime("%Y-%m-%d %H:%M:%S")
+                            if now_str is None:
+                                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            pvdata[mqtt_key] = now_str
                         else:
                             _LOGGER.warning("Unknown calculated pseudo-register: %s", register)
 
