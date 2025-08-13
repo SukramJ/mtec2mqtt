@@ -214,8 +214,8 @@ class MtecCoordinator:
                 self._modbus_client.write_register_by_name(name=register_name, value=msg)
             else:
                 _LOGGER.warning("Received topic %s is not usable.", topic)
-        except Exception as e:
-            _LOGGER.warning("Error while handling MQTT message: %s", str(e))
+        except Exception as ex:
+            _LOGGER.warning("Error while handling MQTT message: %s", ex)
 
     def read_mtec_data(self, group: RegisterGroup) -> PVDATA_TYPE:
         """Read data from MTEC modbus."""
@@ -319,8 +319,8 @@ class MtecCoordinator:
                         ):  # Avoid to report negative values, which might occur in some edge cases
                             pvdata[item[Register.MQTT]] = 0
 
-        except Exception as e:
-            _LOGGER.warning("Retrieved Modbus data is incomplete: %s", str(e))
+        except Exception as ex:
+            _LOGGER.warning("Retrieved Modbus data is incomplete: %s", ex)
             return {}
         return pvdata
 

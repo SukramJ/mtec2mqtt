@@ -28,7 +28,7 @@ class MqttClient:
     def __init__(
         self,
         config: dict[str, Any],
-        on_mqtt_message: Callable,
+        on_mqtt_message: Callable[[mqtt.Client, Any, mqtt.MQTTMessage], None],
         hass: hass_int.HassIntegration | None = None,
     ) -> None:
         """Init the mqtt client."""
@@ -79,7 +79,7 @@ class MqttClient:
             client.loop_start()
             _LOGGER.info("MQTT server started")
         except Exception as ex:
-            msg = "Couldn't start MQTT: {str(e)}"
+            msg = f"Couldn't start MQTT: {ex}"
             _LOGGER.warning(msg)
             raise MtecException(msg) from ex
         else:
@@ -92,16 +92,16 @@ class MqttClient:
                 self.unsubscribe_from_topic(topic=topic)
             self._client.loop_stop()
             _LOGGER.info("MQTT server stopped")
-        except Exception as e:
-            _LOGGER.warning("Couldn't stop MQTT: %s", str(e))
+        except Exception as ex:
+            _LOGGER.warning("Couldn't stop MQTT: %s", ex)
 
     def publish(self, topic: str, payload: str, retain: bool = DEFAULT_RETAIN) -> None:
         """Publish mqtt message."""
         _LOGGER.debug("- %s: %s", topic, str(payload))
         try:
             self._client.publish(topic=topic, payload=payload, retain=retain)
-        except Exception as e:
-            _LOGGER.error("Couldn't send MQTT command: %s", str(e))
+        except Exception as ex:
+            _LOGGER.warning("Couldn't send MQTT command: %s", ex)
 
     def subscribe_to_topic(self, topic: str) -> None:
         """Subscribe on topic."""
@@ -112,7 +112,7 @@ class MqttClient:
             self._client.subscribe(topic=topic)
             self._subscribed_topics.add(topic)
         except Exception as ex:
-            _LOGGER.error("Couldn't subscribe on MQTT topic: %s: %s", topic, ex)
+            _LOGGER.warning("Couldn't subscribe on MQTT topic: %s: %s", topic, ex)
 
     def unsubscribe_from_topic(self, topic: str) -> None:
         """Unsubscribe from topic."""
@@ -123,4 +123,4 @@ class MqttClient:
             self._client.unsubscribe(topic=topic)
             self._subscribed_topics.remove(topic)
         except Exception as ex:
-            _LOGGER.error("Couldn't unsubscribe from MQTT topic: %s: %s", topic, ex)
+            _LOGGER.warning("Couldn't unsubscribe from MQTT topic: %s: %s", topic, ex)

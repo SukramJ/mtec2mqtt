@@ -157,9 +157,8 @@ class MTECModbusClient:
                     for value_modbus, value_display in value_items.items():
                         if value_display == value:
                             value = value_modbus
-                            continue
-                self.write_register(register=register, value=value)
-                return True
+                            break
+                return self.write_register(register=register, value=value)
         _LOGGER.error("Can't write unknown register with name: %s", name)
         return False
 
