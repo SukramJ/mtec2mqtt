@@ -13,7 +13,7 @@ subscribing to its status topic so discovery can be coordinated.
 from __future__ import annotations
 
 from collections.abc import Callable
-from copy import copy
+import contextlib
 import logging
 from typing import Any, Final
 
@@ -41,10 +41,6 @@ class MqttClient:
         self._hass = hass
         self._username: Final[str] = config[Config.MQTT_LOGIN]
         self._password: Final[str] = config[Config.MQTT_PASSWORD]
-        self._auth: Final[dict[str, str]] = {
-            "username": self._username,
-            "password": self._password,
-        }
         self._hostname: Final[str] = config[Config.MQTT_SERVER]
         self._port: Final[int] = config[Config.MQTT_PORT]
         self._hass_status_topic: Final[str] = f"{config[Config.HASS_BASE_TOPIC]}/status"
@@ -69,7 +65,7 @@ class MqttClient:
         _LOGGER.info("MQTT broker subscribed to mid %s", mid)
 
     def _initialize_client(self) -> mqtt.Client:
-        """Initialize and start the MQTT client."""
+        """Initialize and start the MQTT client (non-blocking, with auto-reconnect)."""
         try:
             client = mqtt.Client(client_id=CLIENT_ID)
             client.username_pw_set(username=self._username, password=self._password)
@@ -78,7 +74,19 @@ class MqttClient:
             client.on_message = self._on_mqtt_message
             client.on_subscribe = self._on_mqtt_subscribe
             client.on_disconnect = self._on_mqtt_disconnect
-            client.connect(host=self._hostname, port=self._port)
+
+            # Set a Last Will and Testament to signal unexpected offline state
+            client.will_set(
+                topic=f"{self._hass_status_topic}/lwt",
+                payload="offline",
+                retain=True,
+            )
+
+            # Configure exponential reconnect backoff to reduce tight retry loops
+            client.reconnect_delay_set(min_delay=1, max_delay=120)
+
+            # Use async connect to avoid blocking and enable auto-reconnect in loop
+            client.connect_async(host=self._hostname, port=self._port)
 
             if self._hass:
                 client.subscribe(topic=self._hass_status_topic)
@@ -94,8 +102,12 @@ class MqttClient:
     def stop(self) -> None:
         """Stop the MQTT client."""
         try:
-            for topic in copy(self._subscribed_topics):
+            for topic in list(self._subscribed_topics):
                 self.unsubscribe_from_topic(topic=topic)
+            # Perform a graceful disconnect before stopping the loop
+            with contextlib.suppress(Exception):
+                self._client.disconnect()
+
             self._client.loop_stop()
             _LOGGER.info("MQTT server stopped")
         except Exception as ex:
