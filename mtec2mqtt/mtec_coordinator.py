@@ -12,9 +12,11 @@ shutdown on OS signals.
 
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime, timedelta
 import logging
 import signal
+import threading
 import time
 from typing import Any, Final
 
@@ -87,6 +89,7 @@ class MtecCoordinator:
         self._mqtt_topic: Final[str] = config[Config.MQTT_TOPIC]
         self._hass_birth_gracetime: Final[int] = config.get(Config.HASS_BIRTH_GRACETIME, 15)
         self._hass_status_topic: Final[str] = f"{config[Config.HASS_BASE_TOPIC]}/status"
+        self._hass_birth_timer: threading.Timer | None = None
 
         if config[Config.DEBUG] is True:
             logging.getLogger().setLevel(level=logging.DEBUG)
@@ -97,6 +100,10 @@ class MtecCoordinator:
         # clean up
         # if self._hass:
         #    hass.send_unregister_info()
+        if self._hass_birth_timer is not None:
+            with contextlib.suppress(Exception):
+                self._hass_birth_timer.cancel()
+            self._hass_birth_timer = None
         self._modbus_client.disconnect()
         self._mqtt_client.stop()
         _LOGGER.info("Stopping clients")
@@ -164,10 +171,9 @@ class MtecCoordinator:
             ):
                 self.write_to_mqtt(pvdata=pvdata, topic_base=topic_base, group=group)
 
-            if now_ext_idx >= 4:
-                now_ext_idx = 0
-            else:
-                now_ext_idx += 1
+            # advance round-robin index efficiently without magic numbers
+            if SECONDARY_REGISTER_GROUPS:
+                now_ext_idx = (now_ext_idx + 1) % len(SECONDARY_REGISTER_GROUPS)
 
             # Day
             if next_read_day <= now and (pvdata := self.read_mtec_data(group=RegisterGroup.DAY)):
@@ -206,12 +212,18 @@ class MtecCoordinator:
                 if msg == "online" and self._hass is not None:
                     gracetime = self._hass_birth_gracetime
                     _LOGGER.info(
-                        "Received HASS online message. Sending discovery info in %i sec", gracetime
+                        "Received HASS online message. Scheduling discovery info in %i sec",
+                        gracetime,
                     )
-                    time.sleep(
-                        gracetime
-                    )  # dirty workaround: hass requires some grace period for being ready to receive discovery info
-                    self._hass.send_discovery_info()
+                    # Avoid blocking the MQTT network thread; schedule delayed discovery
+                    if self._hass_birth_timer is not None:
+                        with contextlib.suppress(Exception):
+                            self._hass_birth_timer.cancel()
+                    self._hass_birth_timer = threading.Timer(
+                        interval=gracetime, function=self._send_hass_discovery
+                    )
+                    self._hass_birth_timer.daemon = True
+                    self._hass_birth_timer.start()
                 elif msg == "offline":
                     _LOGGER.info("Received HASS offline message.")
             elif (topic_parts := message.topic.split("/")) is not None and len(topic_parts) >= 4:
@@ -221,6 +233,17 @@ class MtecCoordinator:
                 _LOGGER.warning("Received topic %s is not usable.", topic)
         except Exception as ex:
             _LOGGER.warning("Error while handling MQTT message: %s", ex)
+
+    def _send_hass_discovery(self) -> None:
+        """Send Home Assistant discovery info after grace period (timer callback)."""
+        try:
+            if self._hass is not None:
+                self._hass.send_discovery_info()
+        except Exception as ex:  # defensive
+            _LOGGER.warning("Failed to send HASS discovery info: %s", ex)
+        finally:
+            # clear the timer reference
+            self._hass_birth_timer = None
 
     def read_mtec_data(self, group: RegisterGroup) -> PVDATA_TYPE:
         """Read data from MTEC modbus."""
