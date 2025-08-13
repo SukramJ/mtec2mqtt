@@ -145,15 +145,16 @@ class MtecCoordinator:
                 _LOGGER.warning("Can't retrieve initial config - retry in 10 s")
                 time.sleep(10)
 
-        topic_base = (  # type: ignore[unreachable]
-            f"{self._mqtt_topic}/{pv_config[Register.SERIAL_NO][Register.VALUE]}"
-        )
+        serial_no = pv_config[Register.SERIAL_NO][Register.VALUE]  # type: ignore[unreachable]
+        firmware_version = pv_config[Register.FIRMWARE_VERSION][Register.VALUE]
+        equipment_info = pv_config[Register.EQUIPMENT_INFO][Register.VALUE]
+        topic_base = f"{self._mqtt_topic}/{serial_no}"
         if self._hass and not self._hass.is_initialized:
             self._hass.initialize(
                 mqtt=self._mqtt_client,
-                serial_no=pv_config[Register.SERIAL_NO][Register.VALUE],
-                firmware_version=pv_config[Register.FIRMWARE_VERSION][Register.VALUE],
-                equipment_info=pv_config[Register.EQUIPMENT_INFO][Register.VALUE],
+                serial_no=serial_no,
+                firmware_version=firmware_version,
+                equipment_info=equipment_info,
             )
 
         # Main loop - exit on signal only
@@ -175,7 +176,7 @@ class MtecCoordinator:
                 self.write_to_mqtt(
                     pvdata=pvdata, topic_base=topic_base, group=RegisterGroup.CONFIG
                 )
-                next_read_config = datetime.now() + timedelta(seconds=self._mqtt_refresh_config)
+                next_read_config = now + timedelta(seconds=self._mqtt_refresh_config)
 
             # Now extended - read groups in a round-robin - one per loop
             if (group := SECONDARY_REGISTER_GROUPS.get(now_ext_idx)) and (
@@ -268,99 +269,79 @@ class MtecCoordinator:
         data = self._modbus_client.read_modbus_data(registers=registers)
         pvdata: PVDATA_TYPE = {}
         try:  # assign all data
+            RV = Register.VALUE
+            RMQTT = Register.MQTT
+            RDEV = Register.DEVICE_CLASS
+            RVITEMS = Register.VALUE_ITEMS
+            rdata = data  # local alias
             for register in registers:
                 item = self._register_map[register]
-                if item[Register.MQTT]:
-                    if register.isnumeric():
-                        value = data[register][Register.VALUE]
+                if mqtt_key := item[RMQTT]:
+                    if register.isdigit():
+                        entry = rdata[register]
+                        value = entry[RV]
                         if register == "10011":
                             fw0, fw1 = str(value).split("  ")
-                            data[register][Register.VALUE] = (
-                                f"V{fw0.replace(' ', '.')}-V{fw1.replace(' ', '.')}"
-                            )
-                        if register == "10008":
-                            data[register][Register.VALUE] = _get_equipment_info(value=value)
-                        if item.get(Register.DEVICE_CLASS) == "enum" and (
-                            value_items := item.get(Register.VALUE_ITEMS)
-                        ):
-                            data[register][Register.VALUE] = _convert_code(
-                                value=value, value_items=value_items
-                            )
+                            entry[RV] = f"V{fw0.replace(' ', '.')}-V{fw1.replace(' ', '.')}"
+                        elif register == "10008":
+                            entry[RV] = _get_equipment_info(value=value)
+                        elif item.get(RDEV) == "enum" and (value_items := item.get(RVITEMS)):
+                            entry[RV] = _convert_code(value=value, value_items=value_items)
 
-                        pvdata[item[Register.MQTT]] = data[register]
+                        pvdata[mqtt_key] = entry
                     else:  # non-numeric registers are deemed to be calculated pseudo-registers
+                        # use locals to avoid repeated dict lookups
                         if register == "consumption":
-                            pvdata[item[Register.MQTT]] = (
-                                data["11016"][Register.VALUE] - data["11000"][Register.VALUE]
-                            )  # power consumption
+                            pvdata[mqtt_key] = rdata["11016"][RV] - rdata["11000"][RV]
                         elif register == "consumption-day":
-                            pvdata[item[Register.MQTT]] = (
-                                data["31005"][Register.VALUE]
-                                + data["31001"][Register.VALUE]
-                                + data["31004"][Register.VALUE]
-                                - data["31000"][Register.VALUE]
-                                - data["31003"][Register.VALUE]
-                            )  # power consumption
+                            pvdata[mqtt_key] = (
+                                rdata["31005"][RV]
+                                + rdata["31001"][RV]
+                                + rdata["31004"][RV]
+                                - rdata["31000"][RV]
+                                - rdata["31003"][RV]
+                            )
                         elif register == "autarky-day":
-                            pvdata[item[Register.MQTT]] = (
-                                100
-                                * (1 - (data["31001"][Register.VALUE] / pvdata["consumption_day"]))
-                                if isinstance(pvdata["consumption_day"], float | int)
-                                and float(pvdata["consumption_day"]) > 0
+                            cons_day = pvdata.get("consumption_day")
+                            pvdata[mqtt_key] = (
+                                100 * (1 - (rdata["31001"][RV] / cons_day))
+                                if isinstance(cons_day, (float, int)) and float(cons_day) > 0
                                 else 0
                             )
                         elif register == "ownconsumption-day":
-                            pvdata[item[Register.MQTT]] = (
-                                100
-                                * (
-                                    1
-                                    - data["31000"][Register.VALUE] / data["31005"][Register.VALUE]
-                                )
-                                if data["31005"][Register.VALUE] > 0
-                                else 0
+                            gen_day = rdata["31005"][RV]
+                            pvdata[mqtt_key] = (
+                                100 * (1 - rdata["31000"][RV] / gen_day) if gen_day > 0 else 0
                             )
                         elif register == "consumption-total":
-                            pvdata[item[Register.MQTT]] = (
-                                data["31112"][Register.VALUE]
-                                + data["31104"][Register.VALUE]
-                                + data["31110"][Register.VALUE]
-                                - data["31102"][Register.VALUE]
-                                - data["31108"][Register.VALUE]
-                            )  # power consumption
+                            pvdata[mqtt_key] = (
+                                rdata["31112"][RV]
+                                + rdata["31104"][RV]
+                                + rdata["31110"][RV]
+                                - rdata["31102"][RV]
+                                - rdata["31108"][RV]
+                            )
                         elif register == "autarky-total":
-                            pvdata[item[Register.MQTT]] = (
-                                100
-                                * (
-                                    1
-                                    - (data["31104"][Register.VALUE] / pvdata["consumption_total"])
-                                )
-                                if isinstance(pvdata["consumption_total"], float | int)
-                                and float(pvdata["consumption_total"]) > 0
+                            cons_total = pvdata.get("consumption_total")
+                            pvdata[mqtt_key] = (
+                                100 * (1 - (rdata["31104"][RV] / cons_total))
+                                if isinstance(cons_total, (float, int)) and float(cons_total) > 0
                                 else 0
                             )
                         elif register == "ownconsumption-total":
-                            pvdata[item[Register.MQTT]] = (
-                                100
-                                * (
-                                    1
-                                    - data["31102"][Register.VALUE] / data["31112"][Register.VALUE]
-                                )
-                                if data["31112"][Register.VALUE] > 0
-                                else 0
+                            gen_total = rdata["31112"][RV]
+                            pvdata[mqtt_key] = (
+                                100 * (1 - rdata["31102"][RV] / gen_total) if gen_total > 0 else 0
                             )
                         elif register == "api-date":
-                            pvdata[item[Register.MQTT]] = now.strftime(
-                                "%Y-%m-%d %H:%M:%S"
-                            )  # Local time of this server
+                            pvdata[mqtt_key] = now.strftime("%Y-%m-%d %H:%M:%S")
                         else:
                             _LOGGER.warning("Unknown calculated pseudo-register: %s", register)
 
-                        if (
-                            (value := pvdata[item[Register.MQTT]])
-                            and isinstance(value, float)
-                            and float(value) < 0
-                        ):  # Avoid to report negative values, which might occur in some edge cases
-                            pvdata[item[Register.MQTT]] = 0
+                        # Avoid to report negative values, which might occur in some edge cases
+                        val = pvdata[mqtt_key]
+                        if isinstance(val, float) and val < 0:
+                            pvdata[mqtt_key] = 0
 
         except Exception as ex:
             _LOGGER.warning("Retrieved Modbus data is incomplete: %s", ex)
@@ -369,23 +350,21 @@ class MtecCoordinator:
 
     def write_to_mqtt(self, pvdata: PVDATA_TYPE, topic_base: str, group: RegisterGroup) -> None:
         """Write data to MQTT."""
+        fmt = self._mqtt_float_format
+        publish = self._mqtt_client.publish
+        RV = Register.VALUE
+        base = f"{topic_base}/{group}"
         for param, data in pvdata.items():
-            topic = f"{topic_base}/{group}/{param}/state"
-            if isinstance(data, dict):
-                value = data[Register.VALUE]
-                if isinstance(value, float):
-                    payload = self._mqtt_float_format.format(value)
-                elif isinstance(value, bool):
-                    payload = "1" if value else "0"
-                else:
-                    payload = value
-            elif isinstance(data, float):
-                payload = self._mqtt_float_format.format(data)
-            elif isinstance(data, bool):
-                payload = "1" if data else "0"
+            topic = f"{base}/{param}/state"
+            value = data[RV] if isinstance(data, dict) else data
+
+            if isinstance(value, float):
+                payload = fmt.format(value)
+            elif isinstance(value, bool):
+                payload = "1" if value else "0"
             else:
-                payload = str(data)
-            self._mqtt_client.publish(topic=topic, payload=payload)
+                payload = str(value)
+            publish(topic=topic, payload=payload)
 
 
 def _convert_code(value: int | str, value_items: dict[int, str]) -> str:
