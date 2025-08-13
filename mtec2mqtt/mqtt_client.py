@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable
 import contextlib
 import logging
+import threading
 from typing import Any, Final
 
 from paho.mqtt import client as mqtt
@@ -46,17 +47,30 @@ class MqttClient:
         self._hass_status_topic: Final[str] = f"{config[Config.HASS_BASE_TOPIC]}/status"
         self._client = self._initialize_client()
         self._subscribed_topics: set[str] = set()
+        self._connected: bool = False
+        self._lock: Final = threading.RLock()
 
     def _on_mqtt_connect(
         self, mqttclient: mqtt.Client, userdata: Any, flags: Any, rc: Any
     ) -> None:
         """Handle mqtt connect."""
         if rc == 0:
+            self._connected = True
             _LOGGER.info("Connected to MQTT broker")
+            # Subscribe to HA status topic and any user-requested topics
+            try:
+                if self._hass:
+                    mqttclient.subscribe(topic=self._hass_status_topic)
+                with self._lock:
+                    for topic in self._subscribed_topics:
+                        mqttclient.subscribe(topic=topic)
+            except Exception as ex:  # defensive: avoid breaking network loop
+                _LOGGER.warning("Post-connect subscription failed: %s", ex)
         else:
             _LOGGER.error("Error while connecting to MQTT broker: rc=%s", rc)
 
     def _on_mqtt_disconnect(self, mqttclient: mqtt.Client, userdata: Any, rc: Any) -> None:
+        self._connected = False
         _LOGGER.warning("MQTT broker disconnected: rc=%s", rc)
 
     def _on_mqtt_subscribe(
@@ -85,11 +99,16 @@ class MqttClient:
             # Configure exponential reconnect backoff to reduce tight retry loops
             client.reconnect_delay_set(min_delay=1, max_delay=120)
 
+            # Optimize internal queues: allow QoS0 to be queued while offline
+            with contextlib.suppress(Exception):
+                client.max_inflight_messages_set(20)
+                client.max_queued_messages_set(1000)
+                client.queue_qos0_messages = True  # type: ignore[attr-defined]
+
             # Use async connect to avoid blocking and enable auto-reconnect in loop
             client.connect_async(host=self._hostname, port=self._port)
 
-            if self._hass:
-                client.subscribe(topic=self._hass_status_topic)
+            # Start network loop after initiating connection
             client.loop_start()
             _LOGGER.info("MQTT server started")
         except Exception as ex:
@@ -102,8 +121,12 @@ class MqttClient:
     def stop(self) -> None:
         """Stop the MQTT client."""
         try:
-            for topic in list(self._subscribed_topics):
-                self.unsubscribe_from_topic(topic=topic)
+            # Unsubscribe only if connected to avoid unnecessary errors
+            with self._lock:
+                topics = list(self._subscribed_topics)
+            if self._connected:
+                for topic in topics:
+                    self.unsubscribe_from_topic(topic=topic)
             # Perform a graceful disconnect before stopping the loop
             with contextlib.suppress(Exception):
                 self._client.disconnect()
@@ -117,6 +140,7 @@ class MqttClient:
         """Publish mqtt message."""
         _LOGGER.debug("- %s: %s", topic, str(payload))
         try:
+            # paho will queue messages (including QoS0) while offline due to our configuration
             self._client.publish(topic=topic, payload=payload, retain=retain)
         except Exception as ex:
             _LOGGER.error("Couldn't send MQTT command: %s", ex)
@@ -125,10 +149,12 @@ class MqttClient:
         """Subscribe on topic."""
         _LOGGER.debug("subscribe on %s", topic)
         try:
-            if topic in self._subscribed_topics:
-                return
-            self._client.subscribe(topic=topic)
-            self._subscribed_topics.add(topic)
+            with self._lock:
+                if topic in self._subscribed_topics:
+                    return
+                self._subscribed_topics.add(topic)
+            if self._connected:
+                self._client.subscribe(topic=topic)
         except Exception as ex:
             _LOGGER.error("Couldn't subscribe on MQTT topic: %s: %s", topic, ex)
 
@@ -136,9 +162,11 @@ class MqttClient:
         """Unsubscribe from topic."""
         _LOGGER.debug("unsubscribe from %s", topic)
         try:
-            if topic not in self._subscribed_topics:
-                return
-            self._client.unsubscribe(topic=topic)
-            self._subscribed_topics.remove(topic)
+            with self._lock:
+                if topic not in self._subscribed_topics:
+                    return
+                self._subscribed_topics.remove(topic)
+            if self._connected:
+                self._client.unsubscribe(topic=topic)
         except Exception as ex:
             _LOGGER.error("Couldn't unsubscribe from MQTT topic: %s: %s", topic, ex)
