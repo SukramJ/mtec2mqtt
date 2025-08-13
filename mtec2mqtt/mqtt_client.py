@@ -51,7 +51,7 @@ class MqttClient:
         self._lock: Final = threading.RLock()
 
     def _on_mqtt_connect(
-        self, mqttclient: mqtt.Client, userdata: Any, flags: Any, rc: Any
+        self, mqttclient: mqtt.Client, userdata: Any, flags: Any, rc: int
     ) -> None:
         """Handle mqtt connect."""
         if rc == 0:
@@ -62,27 +62,30 @@ class MqttClient:
                 if self._hass:
                     mqttclient.subscribe(topic=self._hass_status_topic)
                 with self._lock:
-                    for topic in self._subscribed_topics:
+                    for topic in list(self._subscribed_topics):
                         mqttclient.subscribe(topic=topic)
             except Exception as ex:  # defensive: avoid breaking network loop
                 _LOGGER.warning("Post-connect subscription failed: %s", ex)
         else:
             _LOGGER.error("Error while connecting to MQTT broker: rc=%s", rc)
 
-    def _on_mqtt_disconnect(self, mqttclient: mqtt.Client, userdata: Any, rc: Any) -> None:
+    def _on_mqtt_disconnect(self, mqttclient: mqtt.Client, userdata: Any, rc: int) -> None:
         self._connected = False
         _LOGGER.warning("MQTT broker disconnected: rc=%s", rc)
 
     def _on_mqtt_subscribe(
-        self, mqttclient: mqtt.Client, userdata: Any, mid: Any, granted_qos: Any
+        self, mqttclient: mqtt.Client, userdata: Any, mid: int, granted_qos: Any
     ) -> None:
         _LOGGER.info("MQTT broker subscribed to mid %s", mid)
 
     def _initialize_client(self) -> mqtt.Client:
         """Initialize and start the MQTT client (non-blocking, with auto-reconnect)."""
         try:
-            client = mqtt.Client(client_id=CLIENT_ID)
+            client = mqtt.Client(client_id=CLIENT_ID, protocol=mqtt.MQTTv311, clean_session=True)
             client.username_pw_set(username=self._username, password=self._password)
+            # Route paho internal logs into our logger (useful for debugging)
+            with contextlib.suppress(Exception):
+                client.enable_logger(_LOGGER)
             # Set handlers before connecting to avoid missing early events
             client.on_connect = self._on_mqtt_connect
             client.on_message = self._on_mqtt_message
@@ -106,7 +109,7 @@ class MqttClient:
                 client.queue_qos0_messages = True  # type: ignore[attr-defined]
 
             # Use async connect to avoid blocking and enable auto-reconnect in loop
-            client.connect_async(host=self._hostname, port=self._port)
+            client.connect_async(host=self._hostname, port=self._port, keepalive=60)
 
             # Start network loop after initiating connection
             client.loop_start()
@@ -131,7 +134,15 @@ class MqttClient:
             with contextlib.suppress(Exception):
                 self._client.disconnect()
 
+            # Wait for network thread to stop cleanly
             self._client.loop_stop()
+
+            # Drop callbacks to help GC and avoid accidental calls post-stop
+            self._client.on_connect = None
+            self._client.on_message = None
+            self._client.on_subscribe = None
+            self._client.on_disconnect = None
+
             _LOGGER.info("MQTT server stopped")
         except Exception as ex:
             _LOGGER.warning("Couldn't stop MQTT: %s", ex)
@@ -141,7 +152,7 @@ class MqttClient:
         _LOGGER.debug("- %s: %s", topic, str(payload))
         try:
             # paho will queue messages (including QoS0) while offline due to our configuration
-            self._client.publish(topic=topic, payload=payload, retain=retain)
+            self._client.publish(topic=topic, payload=payload, qos=0, retain=retain)
         except Exception as ex:
             _LOGGER.error("Couldn't send MQTT command: %s", ex)
 
