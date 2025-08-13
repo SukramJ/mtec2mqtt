@@ -192,7 +192,7 @@ class MTECModbusClient:
             _LOGGER.error("Exception while writing register %s to pymodbus: %s", register, ex)
             return False
         except Exception as ex:
-            _LOGGER.warning("Unexpected error while writing register %s: %s", register, ex)
+            _LOGGER.error("Unexpected error while writing register %s: %s", register, ex)
             return False
 
         if result.isError():

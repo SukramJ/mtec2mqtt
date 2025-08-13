@@ -94,7 +94,7 @@ class MqttClient:
             self._client.loop_stop()
             _LOGGER.info("MQTT server stopped")
         except Exception as ex:
-            _LOGGER.error("Couldn't stop MQTT: %s", ex)
+            _LOGGER.warning("Couldn't stop MQTT: %s", ex)
 
     def publish(self, topic: str, payload: str, retain: bool = DEFAULT_RETAIN) -> None:
         """Publish mqtt message."""
