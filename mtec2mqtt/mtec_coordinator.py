@@ -261,7 +261,7 @@ class MtecCoordinator:
 
     def read_mtec_data(self, group: RegisterGroup) -> PVDATA_TYPE:
         """Read data from MTEC modbus."""
-        _LOGGER.debug("Reading registers for group: %s", group)
+        _LOGGER.info("Reading registers for group: %s", group)
         if (registers := self._registers_by_group.get(group)) is None:
             # Lazy compute and cache if not present
             registers = self._modbus_client.get_register_list(group=group)

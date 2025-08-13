@@ -38,7 +38,7 @@ class HassIntegration:
         self._mqtt: mqtt_client.MqttClient = None  # type: ignore[assignment]
         self._serial_no: str | None = None
         self._is_initialized = False
-        self._devices_array: Final[list[tuple[str, Any]]] = []
+        self._devices_array: Final[list[tuple[str, dict[HA, Any]]]] = []
         self._device_info: dict[str, Any] = {}
 
     @property
@@ -74,14 +74,11 @@ class HassIntegration:
     def send_discovery_info(self) -> None:
         """Send discovery info."""
         _LOGGER.info("Sending home assistant discovery info")
-        for device in self._devices_array:
-            topic = device[0]
-            payload = device[1]
-            self._mqtt.publish(topic=topic, payload=payload, retain=True)
-            if HA.COMMAND_TOPIC in payload:
-                data = json.loads(payload)
-                if command_topic := data.get(HA.COMMAND_TOPIC):
-                    self._mqtt.subscribe_to_topic(topic=command_topic)
+        for topic, payload in self._devices_array:
+            # Publish serialized payload once; avoid parse-then-read cycle
+            self._mqtt.publish(topic=topic, payload=json.dumps(payload), retain=True)
+            if command_topic := payload.get(HA.COMMAND_TOPIC):
+                self._mqtt.subscribe_to_topic(topic=command_topic)
 
     def send_unregister_info(self) -> None:
         """Send unregister info."""
@@ -100,17 +97,13 @@ class HassIntegration:
                 HA.UNIQUE_ID: item[1],
             }
             topic = f"{self._hass_base_topic}/button/{item[1]}/config"
-            self._devices_array.append((topic, json.dumps(data_item)))
+            self._devices_array.append((topic, data_item))
 
     def _build_devices_array(self) -> None:
         """Build discovery data for devices."""
         for item in self._register_map.values():
             # Do registration if there is a "hass_" config entry
-            do_hass_registration = False
-            for key in item:
-                if "hass_" in key:
-                    do_hass_registration = True
-                    break
+            do_hass_registration = any("hass_" in key for key in item)
 
             if item[Register.GROUP] and do_hass_registration:
                 component_type = item.get(Register.COMPONENT_TYPE, HAPlatform.SENSOR)
@@ -145,7 +138,7 @@ class HassIntegration:
             data_item[HA.STATE_CLASS] = hass_state_class
 
         topic = f"{self._hass_base_topic}/{HAPlatform.SENSOR}/{MTEC_PREFIX}{item[Register.MQTT]}/config"
-        self._devices_array.append((topic, json.dumps(data_item)))
+        self._devices_array.append((topic, data_item))
 
     def _append_binary_sensor(self, item: dict[str, Any]) -> None:
         data_item = {
@@ -164,7 +157,7 @@ class HassIntegration:
             data_item[HA.PAYLOAD_OFF] = hass_payload_off
 
         topic = f"{self._hass_base_topic}/{HAPlatform.BINARY_SENSOR}/{MTEC_PREFIX}{item[Register.MQTT]}/config"
-        self._devices_array.append((topic, json.dumps(data_item)))
+        self._devices_array.append((topic, data_item))
 
     def _append_number(self, item: dict[str, Any]) -> None:
         mtec_topic = (
@@ -185,7 +178,7 @@ class HassIntegration:
             data_item[HA.DEVICE_CLASS] = hass_device_class
 
         topic = f"{self._hass_base_topic}/{HAPlatform.NUMBER}/{MTEC_PREFIX}{item[Register.MQTT]}/config"
-        self._devices_array.append((topic, json.dumps(data_item)))
+        self._devices_array.append((topic, data_item))
 
     def _append_select(self, item: dict[str, Any]) -> None:
         options = item[Register.VALUE_ITEMS]
@@ -203,7 +196,7 @@ class HassIntegration:
         }
 
         topic = f"{self._hass_base_topic}/{HAPlatform.SELECT}/{MTEC_PREFIX}{item[Register.MQTT]}/config"
-        self._devices_array.append((topic, json.dumps(data_item)))
+        self._devices_array.append((topic, data_item))
 
     def _append_switch(self, item: dict[str, Any]) -> None:
         mtec_topic = (
@@ -226,4 +219,4 @@ class HassIntegration:
             data_item[HA.PAYLOAD_OFF] = hass_payload_off
 
         topic = f"{self._hass_base_topic}/{HAPlatform.SWITCH}/{MTEC_PREFIX}{item[Register.MQTT]}/config"
-        self._devices_array.append((topic, json.dumps(data_item)))
+        self._devices_array.append((topic, data_item))
