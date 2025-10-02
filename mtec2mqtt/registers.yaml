@@ -1096,6 +1096,32 @@
   hass_value_template: "{{ value | round(1) }}"
   hass_state_class: measurement
 
+"52601":
+  name: Charge limit
+  length: 1
+  type: U16
+  unit: "A"
+  scale: 10
+  writable: true
+  mqtt: charge_limit
+  group: config
+  hass_component_type: number
+  hass_value_template: "{{ value | round(1) }}"
+  hass_state_class: measurement
+
+"52603":
+  name: Discharge limit
+  length: 1
+  type: U16
+  unit: "A"
+  scale: 10
+  writable: true
+  mqtt: discharge_limit
+  group: config
+  hass_component_type: number
+  hass_value_template: "{{ value | round(1) }}"
+  hass_state_class: measurement
+
 "53509":
   name: BMS Error Code
   length: 2
